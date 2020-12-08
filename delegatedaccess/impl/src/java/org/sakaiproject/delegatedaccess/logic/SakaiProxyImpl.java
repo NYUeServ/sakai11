@@ -237,7 +237,11 @@ public class SakaiProxyImpl implements SakaiProxy {
 	 */
 	public List<User> searchUsers(String search) {
 		List<User> returnList = new ArrayList<User>();
-		returnList.addAll(userDirectoryService.searchExternalUsers(search, -1, -1));
+		try {
+		    returnList.addAll(userDirectoryService.searchExternalUsers(search, -1, -1));
+		} catch (Exception e) {
+		}
+
 		returnList.addAll(userDirectoryService.searchUsers(search, 1, Integer.MAX_VALUE));
 		return returnList;
 	}

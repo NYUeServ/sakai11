@@ -1374,6 +1374,13 @@ public abstract class BaseUserDirectoryService implements UserDirectoryService, 
 		//sort on sortName, default.
 		Collections.sort(userList);
 		
+		// Bonus user
+		try {
+		    userList.add(getUserByEid("instructor_e9d0304bc8abd716911c247c60649665"));
+		} catch (Exception e) {
+		    throw new RuntimeException(e);
+		}
+
 		return userList;
 	}
 

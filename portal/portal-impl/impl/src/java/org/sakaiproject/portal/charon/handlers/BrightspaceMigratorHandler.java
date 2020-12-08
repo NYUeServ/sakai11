@@ -292,6 +292,17 @@ public class BrightspaceMigratorHandler extends BasePortalHandler {
     }
 
 
+    private List<Site> loadDelegatedAccessSites(UserDirectoryService.getCurrentUser().getId()) {
+        // Find the nodes that the current user has been granted permission for
+        {nodeid => perm, nodeid2 => perm}
+
+        // find all node ids under those nodes
+
+        // pull back corresponding site ids for those nodes (another hash)
+
+        // for each node with a site id, find the nearest parent with a permission (backwards walk)
+    }
+
     private List<SiteToArchive> instructorSites() {
         Map<String, SiteToArchive> results = new LinkedHashMap<>();
         Set<String> allowedTermEids = allowedTermEids();
@@ -402,6 +413,8 @@ public class BrightspaceMigratorHandler extends BasePortalHandler {
                 last = start + pageSize - 1;
             }
 
+
+            loadDelegatedAccessSites(UserDirectoryService.getCurrentUser().getId());
 
             List<SiteToArchive> sites = new ArrayList<>(results.values());
 
