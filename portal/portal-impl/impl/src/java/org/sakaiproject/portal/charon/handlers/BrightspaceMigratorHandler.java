@@ -10,6 +10,7 @@ import org.sakaiproject.authz.cover.SecurityService;
 import org.sakaiproject.component.cover.ComponentManager;
 import org.sakaiproject.component.cover.HotReloadConfigurationService;
 import org.sakaiproject.db.api.SqlService;
+import org.sakaiproject.exception.IdUnusedException;
 import org.sakaiproject.javax.PagingPosition;
 import org.sakaiproject.portal.api.PortalHandlerException;
 import org.sakaiproject.site.api.Site;
@@ -291,16 +292,117 @@ public class BrightspaceMigratorHandler extends BasePortalHandler {
         return (boolean)session.getAttribute(SESSION_KEY_RULE_LAST_VALUE);
     }
 
+    private static String[] SUPPORTED_DELEGATED_ACCESS_ROLES = new String[]{
+        "Instructor",
+        "Course Site Admin"
+    }; 
+    private List<String> loadDelegatedAccessSiteIds(Connection db, String userId) throws SQLException {
+        List<String> siteRefs = new ArrayList<>();
 
-    private List<Site> loadDelegatedAccessSites(UserDirectoryService.getCurrentUser().getId()) {
         // Find the nodes that the current user has been granted permission for
-        {nodeid => perm, nodeid2 => perm}
+        Map<Long, String> permissions = new HashMap<>();
+        try (PreparedStatement ps = db.prepareStatement("select * from HIERARCHY_PERMS where userid = ? and permission like 'role:%'")) {
+            ps.setString(1, userId);
+
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    String role = rs.getString("permission").split(":")[1];
+                    Long nodeId = rs.getLong("nodeid");
+                    permissions.put(nodeId, role);
+                }
+            }
+        }
+
+        System.out.println("permissions");
+        System.out.println(permissions);
 
         // find all node ids under those nodes
+        Set<Long> siteNodeIds = new HashSet<>();
+        String placeholders = permissions.keySet().stream().map(_p -> "?").collect(Collectors.joining(","));
+        try (PreparedStatement ps = db.prepareStatement("select * from HIERARCHY_NODE where id in (" + placeholders + ")")) {
+            List<Long> nodeIds = new ArrayList<>(permissions.keySet());
+            for (int i = 0; i < nodeIds.size(); i++) {
+                ps.setLong(i + 1, nodeIds.get(i));
+            }
+
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    if (rs.getString("childids") == null) {
+                        // this is the site!
+                        siteNodeIds.add(rs.getLong("id"));
+                    } else {
+                        String childIdString = rs.getString("childids");
+                        List<String> childIds = Arrays.asList(childIdString.split(":")).stream().filter((s) -> !s.trim().isEmpty()).collect(Collectors.toList());
+                        siteNodeIds.add(Long.valueOf(childIds.get(childIds.size() - 1)));
+                    }
+                }
+            }
+        }
+
+        System.out.println("siteNodeIds");
+        System.out.println(siteNodeIds);
 
         // pull back corresponding site ids for those nodes (another hash)
+        Map<Long, String> nodeIdToSiteRef = new HashMap<>();
+        placeholders = siteNodeIds.stream().map(_p -> "?").collect(Collectors.joining(","));
+        try (PreparedStatement ps = db.prepareStatement("select * from HIERARCHY_NODE_META where id in (" + placeholders + ")")) {
+            List<Long> siteNodeIdsArr = new ArrayList<>(siteNodeIds);
+            for (int i = 0; i < siteNodeIdsArr.size(); i++) {
+                ps.setLong(i + 1, siteNodeIdsArr.get(i));
+            }
+
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    String title = rs.getString("title");
+                    if (title.startsWith("/site/")) {
+                        nodeIdToSiteRef.put(rs.getLong("id"), title);
+                    }
+                }
+            }
+        }
+
+        System.out.println("nodeIdToSiteRef");
+        System.out.println(nodeIdToSiteRef);
 
         // for each node with a site id, find the nearest parent with a permission (backwards walk)
+        placeholders = nodeIdToSiteRef.keySet().stream().map(_p -> "?").collect(Collectors.joining(","));
+        try (PreparedStatement ps = db.prepareStatement("select * from HIERARCHY_NODE where id in (" + placeholders + ")")) {
+            List<Long> nodeIds = new ArrayList<>(nodeIdToSiteRef.keySet());
+            for (int i = 0; i < nodeIds.size(); i++) {
+                ps.setLong(i + 1, nodeIds.get(i));
+            }
+
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    List<Long> nodeIdsTocheck = new ArrayList<>();
+                    Long currentNodeId = rs.getLong("id");
+
+                    if (rs.getString("parentids") == null) {
+                        // this is the root! just check it
+                        nodeIdsTocheck.add(currentNodeId);
+                    } else {
+                        String parentIdsString = rs.getString("parentids");
+                        nodeIdsTocheck = Arrays.asList(parentIdsString.split(":"))
+                                               .stream()
+                                               .filter((s) -> !s.trim().isEmpty())
+                                               .map((s) -> Long.valueOf(s))
+                                               .collect(Collectors.toList());
+                        Collections.reverse(nodeIdsTocheck);
+                    }
+
+                    for (Long nodeId : nodeIdsTocheck) {
+                        if (permissions.containsKey(nodeId) && Arrays.asList(SUPPORTED_DELEGATED_ACCESS_ROLES).contains(permissions.get(nodeId))) {
+                            siteRefs.add(nodeIdToSiteRef.get(currentNodeId));
+                        }
+                    }
+                }
+            }
+        }
+
+        System.out.println("siteRefs");
+        System.out.println(siteRefs);
+
+        return siteRefs.stream().map(s -> s.split("/")[2]).collect(Collectors.toList());
     }
 
     private List<SiteToArchive> instructorSites() {
@@ -329,81 +431,14 @@ public class BrightspaceMigratorHandler extends BasePortalHandler {
                         continue;
                     }
 
-                    SiteToArchive siteToArchive = new SiteToArchive();
-                    siteToArchive.siteId = userSite.getId();
-                    siteToArchive.title = userSite.getTitle();
-                    siteToArchive.term = userSite.getProperties().getProperty("term_eid");
-                    if (siteToArchive.term == null) {
-                        siteToArchive.term = StringUtils.capitalize(userSite.getType());
-                    }
-                    siteToArchive.requests = new ArrayList<>();
-                    siteToArchive.rosters = new ArrayList<>(authzGroupService.getProviderIds(String.format("/site/%s", userSite.getId())));
-                    siteToArchive.instructors = new ArrayList<>();
-
-                    siteToArchive.school = userSite.getProperties().getProperty("School");
-                    siteToArchive.department = userSite.getProperties().getProperty("Department");
+                    SiteToArchive siteToArchive = buildSiteToArchive(userSite);
 
                     results.put(siteToArchive.siteId, siteToArchive);
                 }
 
                 List<String> chunkSiteIds = userSites.stream().map(s -> s.getId()).collect(Collectors.toList());
 
-                String placeholders = chunkSiteIds.stream().map(_p -> "?").collect(Collectors.joining(","));
-
-                try (PreparedStatement ps = db.prepareStatement("select * from NYU_T_SITE_ARCHIVES_QUEUE where site_id in (" + placeholders + ")")) {
-                    for (int i = 0; i < chunkSiteIds.size(); i++) {
-                        ps.setString(i + 1, chunkSiteIds.get(i));
-                    }
-
-                    try (ResultSet rs = ps.executeQuery()) {
-                        while (rs.next()) {
-                            String siteId = rs.getString("site_id");
-
-                            if (rs.getString("queued_by") != null) {
-                                SiteArchiveRequest request = new SiteArchiveRequest();
-                                request.queuedAt = rs.getLong("queued_at");
-                                request.queuedBy = rs.getString("queued_by");
-                                request.archivedAt = rs.getLong("archived_at");
-                                request.uploadedAt = rs.getLong("uploaded_at");
-                                request.completedAt = rs.getLong("completed_at");
-                                request.brightspaceOrgUnitId = rs.getLong("brightspace_org_unit_id");
-                                results.get(siteId).requests.add(request);
-                            }
-                        }
-                    }
-                }
-
-                try (PreparedStatement ps = db.prepareStatement("select distinct ss.site_id, memb.user_id, usr.fname, usr.lname" +
-                                                                " from cm_member_container_t cont" +
-                                                                " inner join cm_membership_t memb on cont.member_container_id = memb.member_container_id AND memb.role = 'I'" +
-                                                                " inner join sakai_realm_provider srp on srp.provider_id = cont.enterprise_id" +
-                                                                " inner join sakai_realm sr on srp.realm_key = sr.realm_key" +
-                                                                " inner join sakai_site ss on sr.realm_id = concat('/site/', ss.site_id)" +
-                                                                " left outer join NYU_T_USERS usr on usr.netid = memb.user_id" +
-                                                                " where ss.site_id in (" + placeholders + ")")) {
-                    for (int i = 0; i < chunkSiteIds.size(); i++) {
-                        ps.setString(i + 1, chunkSiteIds.get(i));
-                    }
-
-                    try (ResultSet rs = ps.executeQuery()) {
-                        while (rs.next()) {
-                            String siteId = rs.getString("site_id");
-                            String netid = rs.getString("user_id");
-
-                            Map<String, String> instructor = new HashMap<>();
-                            instructor.put("netid", netid);
-                            String firstName = rs.getString("fname");
-                            String lastName = rs.getString("lname");
-                            String displayName = netid;
-                            if (firstName != null && lastName != null) {
-                                displayName = String.format("%s %s (%s)", firstName, lastName, netid);
-                            }
-                            instructor.put("displayName", displayName);
-
-                            results.get(siteId).instructors.add(instructor);
-                        }
-                    }
-                }
+                populateData(db, results, chunkSiteIds);
 
                 if (userSites.size() < pageSize) {
                     break;
@@ -414,7 +449,24 @@ public class BrightspaceMigratorHandler extends BasePortalHandler {
             }
 
 
-            loadDelegatedAccessSites(UserDirectoryService.getCurrentUser().getId());
+            List<String> delegatedAccessSiteIds = loadDelegatedAccessSiteIds(db, UserDirectoryService.getCurrentUser().getId());
+            if (!delegatedAccessSiteIds.isEmpty()) {
+                for (String siteId : delegatedAccessSiteIds) {
+                    if (results.containsKey(siteId)) {
+                        continue;
+                    }
+
+                    try {
+                        Site site = SiteService.getSite(siteId);
+                        SiteToArchive siteToArchive = buildSiteToArchive(site);
+                        results.put(siteId, siteToArchive);
+                    } catch (IdUnusedException e) {
+                        e.printStackTrace();
+                    }
+                }
+
+                populateData(db, results, delegatedAccessSiteIds);
+            }
 
             List<SiteToArchive> sites = new ArrayList<>(results.values());
 
@@ -443,6 +495,83 @@ public class BrightspaceMigratorHandler extends BasePortalHandler {
                 sqlService.returnConnection(db);
             }
         }
+    }
+
+    private void populateData(Connection db, Map<String, SiteToArchive> siteToArchiveMap, List<String> siteIdsToProcess) throws SQLException {
+        String placeholders = siteIdsToProcess.stream().map(_p -> "?").collect(Collectors.joining(","));
+
+        try (PreparedStatement ps = db.prepareStatement("select * from NYU_T_SITE_ARCHIVES_QUEUE where site_id in (" + placeholders + ")")) {
+            for (int i = 0; i < siteIdsToProcess.size(); i++) {
+                ps.setString(i + 1, siteIdsToProcess.get(i));
+            }
+
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    String siteId = rs.getString("site_id");
+
+                    if (rs.getString("queued_by") != null) {
+                        SiteArchiveRequest request = new SiteArchiveRequest();
+                        request.queuedAt = rs.getLong("queued_at");
+                        request.queuedBy = rs.getString("queued_by");
+                        request.archivedAt = rs.getLong("archived_at");
+                        request.uploadedAt = rs.getLong("uploaded_at");
+                        request.completedAt = rs.getLong("completed_at");
+                        request.brightspaceOrgUnitId = rs.getLong("brightspace_org_unit_id");
+                        siteToArchiveMap.get(siteId).requests.add(request);
+                    }
+                }
+            }
+        }
+
+        try (PreparedStatement ps = db.prepareStatement("select distinct ss.site_id, memb.user_id, usr.fname, usr.lname" +
+                " from cm_member_container_t cont" +
+                " inner join cm_membership_t memb on cont.member_container_id = memb.member_container_id AND memb.role = 'I'" +
+                " inner join sakai_realm_provider srp on srp.provider_id = cont.enterprise_id" +
+                " inner join sakai_realm sr on srp.realm_key = sr.realm_key" +
+                " inner join sakai_site ss on sr.realm_id = concat('/site/', ss.site_id)" +
+                " left outer join NYU_T_USERS usr on usr.netid = memb.user_id" +
+                " where ss.site_id in (" + placeholders + ")")) {
+            for (int i = 0; i < siteIdsToProcess.size(); i++) {
+                ps.setString(i + 1, siteIdsToProcess.get(i));
+            }
+
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    String siteId = rs.getString("site_id");
+                    String netid = rs.getString("user_id");
+
+                    Map<String, String> instructor = new HashMap<>();
+                    instructor.put("netid", netid);
+                    String firstName = rs.getString("fname");
+                    String lastName = rs.getString("lname");
+                    String displayName = netid;
+                    if (firstName != null && lastName != null) {
+                        displayName = String.format("%s %s (%s)", firstName, lastName, netid);
+                    }
+                    instructor.put("displayName", displayName);
+
+                    siteToArchiveMap.get(siteId).instructors.add(instructor);
+                }
+            }
+        }
+    }
+
+    private SiteToArchive buildSiteToArchive(Site site) {
+        SiteToArchive siteToArchive = new SiteToArchive();
+        siteToArchive.siteId = site.getId();
+        siteToArchive.title = site.getTitle();
+        siteToArchive.term = site.getProperties().getProperty("term_eid");
+        if (siteToArchive.term == null) {
+            siteToArchive.term = StringUtils.capitalize(site.getType());
+        }
+        siteToArchive.requests = new ArrayList<>();
+        siteToArchive.rosters = new ArrayList<>(authzGroupService.getProviderIds(String.format("/site/%s", site.getId())));
+        siteToArchive.instructors = new ArrayList<>();
+
+        siteToArchive.school = site.getProperties().getProperty("School");
+        siteToArchive.department = site.getProperties().getProperty("Department");
+
+        return siteToArchive;
     }
 
     private void queueSiteForArchive(String siteId) {
