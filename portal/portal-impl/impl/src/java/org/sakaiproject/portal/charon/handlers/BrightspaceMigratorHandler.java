@@ -313,9 +313,6 @@ public class BrightspaceMigratorHandler extends BasePortalHandler {
             }
         }
 
-        System.out.println("permissions");
-        System.out.println(permissions);
-
         // find all node ids under those nodes
         Set<Long> allChildNodeIds = new HashSet<>();
         String placeholders = permissions.keySet().stream().map(_p -> "?").collect(Collectors.joining(","));
@@ -342,9 +339,6 @@ public class BrightspaceMigratorHandler extends BasePortalHandler {
             }
         }
 
-        System.out.println("allChildNodeIds");
-        System.out.println(allChildNodeIds);
-
         // pull back corresponding site ids for those nodes (another hash)
         Map<Long, String> nodeIdToSiteRef = new HashMap<>();
         placeholders = allChildNodeIds.stream().map(_p -> "?").collect(Collectors.joining(","));
@@ -363,9 +357,6 @@ public class BrightspaceMigratorHandler extends BasePortalHandler {
                 }
             }
         }
-
-        System.out.println("nodeIdToSiteRef");
-        System.out.println(nodeIdToSiteRef);
 
         // for each node with a site id, find the nearest parent with a permission (backwards walk)
         placeholders = nodeIdToSiteRef.keySet().stream().map(_p -> "?").collect(Collectors.joining(","));
@@ -402,9 +393,6 @@ public class BrightspaceMigratorHandler extends BasePortalHandler {
                 }
             }
         }
-
-        System.out.println("siteRefs");
-        System.out.println(siteRefs);
 
         return siteRefs.stream().map(s -> s.split("/")[2]).collect(Collectors.toList());
     }
