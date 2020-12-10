@@ -294,8 +294,8 @@ public class BrightspaceMigratorHandler extends BasePortalHandler {
 
     private static String[] SUPPORTED_DELEGATED_ACCESS_ROLES = new String[]{
         "Instructor",
-        "Course Site Admin"
     }; 
+
     private List<String> loadDelegatedAccessSiteIds(Connection db, String userId) throws SQLException {
         List<String> siteRefs = new ArrayList<>();
 
