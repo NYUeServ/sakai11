@@ -379,18 +379,19 @@ public class BrightspaceMigratorHandler extends BasePortalHandler {
                 while (rs.next()) {
                     List<Long> nodeIdsTocheck = new ArrayList<>();
                     Long currentNodeId = rs.getLong("id");
+                    nodeIdsTocheck.add(currentNodeId);
 
-                    if (rs.getString("parentids") == null) {
-                        // this is the root! just check it
-                        nodeIdsTocheck.add(currentNodeId);
-                    } else {
+                    if (rs.getString("parentids") != null) {
                         String parentIdsString = rs.getString("parentids");
-                        nodeIdsTocheck = Arrays.asList(parentIdsString.split(":"))
-                                               .stream()
-                                               .filter((s) -> !s.trim().isEmpty())
-                                               .map((s) -> Long.valueOf(s))
-                                               .collect(Collectors.toList());
-                        Collections.reverse(nodeIdsTocheck);
+
+                        List<Long> ancestors = Arrays.asList(parentIdsString.split(":"))
+                            .stream()
+                            .filter((s) -> !s.trim().isEmpty())
+                            .map((s) -> Long.valueOf(s))
+                            .collect(Collectors.toList());
+
+                        Collections.reverse(ancestors);
+                        nodeIdsTocheck.addAll(ancestors);
                     }
 
                     for (Long nodeId : nodeIdsTocheck) {
