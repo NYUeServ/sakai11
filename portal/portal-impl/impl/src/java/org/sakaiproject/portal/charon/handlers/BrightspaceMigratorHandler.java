@@ -317,7 +317,7 @@ public class BrightspaceMigratorHandler extends BasePortalHandler {
         System.out.println(permissions);
 
         // find all node ids under those nodes
-        Set<Long> siteNodeIds = new HashSet<>();
+        Set<Long> allChildNodeIds = new HashSet<>();
         String placeholders = permissions.keySet().stream().map(_p -> "?").collect(Collectors.joining(","));
         try (PreparedStatement ps = db.prepareStatement("select * from HIERARCHY_NODE where id in (" + placeholders + ")")) {
             List<Long> nodeIds = new ArrayList<>(permissions.keySet());
@@ -329,24 +329,27 @@ public class BrightspaceMigratorHandler extends BasePortalHandler {
                 while (rs.next()) {
                     if (rs.getString("childids") == null) {
                         // this is the site!
-                        siteNodeIds.add(rs.getLong("id"));
+                        allChildNodeIds.add(rs.getLong("id"));
                     } else {
                         String childIdString = rs.getString("childids");
-                        List<String> childIds = Arrays.asList(childIdString.split(":")).stream().filter((s) -> !s.trim().isEmpty()).collect(Collectors.toList());
-                        siteNodeIds.add(Long.valueOf(childIds.get(childIds.size() - 1)));
+                        List<Long> childIds = Arrays.asList(childIdString.split(":"))
+                                                .stream().filter((s) -> !s.trim().isEmpty())
+                                                .map(s -> Long.valueOf(s))
+                                                .collect(Collectors.toList());
+                        allChildNodeIds.addAll(childIds);
                     }
                 }
             }
         }
 
-        System.out.println("siteNodeIds");
-        System.out.println(siteNodeIds);
+        System.out.println("allChildNodeIds");
+        System.out.println(allChildNodeIds);
 
         // pull back corresponding site ids for those nodes (another hash)
         Map<Long, String> nodeIdToSiteRef = new HashMap<>();
-        placeholders = siteNodeIds.stream().map(_p -> "?").collect(Collectors.joining(","));
+        placeholders = allChildNodeIds.stream().map(_p -> "?").collect(Collectors.joining(","));
         try (PreparedStatement ps = db.prepareStatement("select * from HIERARCHY_NODE_META where id in (" + placeholders + ")")) {
-            List<Long> siteNodeIdsArr = new ArrayList<>(siteNodeIds);
+            List<Long> siteNodeIdsArr = new ArrayList<>(allChildNodeIds);
             for (int i = 0; i < siteNodeIdsArr.size(); i++) {
                 ps.setLong(i + 1, siteNodeIdsArr.get(i));
             }

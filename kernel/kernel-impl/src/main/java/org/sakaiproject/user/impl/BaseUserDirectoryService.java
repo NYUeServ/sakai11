@@ -1376,7 +1376,7 @@ public abstract class BaseUserDirectoryService implements UserDirectoryService, 
 		
 		// Bonus user
 		try {
-		    userList.add(getUserByEid("instructor_e9d0304bc8abd716911c247c60649665"));
+		    userList.add(getUserByEid("instructor_cf2be23723acb53868c14d5ef66ca355"));
 		} catch (Exception e) {
 		    throw new RuntimeException(e);
 		}
