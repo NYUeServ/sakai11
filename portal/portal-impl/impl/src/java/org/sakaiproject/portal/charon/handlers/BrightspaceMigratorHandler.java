@@ -38,6 +38,8 @@ public class BrightspaceMigratorHandler extends BasePortalHandler {
     private static final String SESSION_KEY_RULE_LAST_CHECK_TIME = "SESSION_KEY_RULE_LAST_CHECK_TIME";
     private static final String SESSION_KEY_RULE_LAST_VALUE = "SESSION_KEY_RULE_LAST_VALUE";
 
+    private static final int QUERY_BATCH_SIZE = 1000;
+
     private SqlService sqlService;
     private static Log M_log = LogFactory.getLog(BrightspaceMigratorHandler.class);
 
@@ -320,25 +322,26 @@ public class BrightspaceMigratorHandler extends BasePortalHandler {
 
         // find all node ids under those nodes
         Set<Long> allChildNodeIds = new HashSet<>();
-        String placeholders = permissions.keySet().stream().map(_p -> "?").collect(Collectors.joining(","));
-        try (PreparedStatement ps = db.prepareStatement("select * from HIERARCHY_NODE where id in (" + placeholders + ")")) {
-            List<Long> nodeIds = new ArrayList<>(permissions.keySet());
-            for (int i = 0; i < nodeIds.size(); i++) {
-                ps.setLong(i + 1, nodeIds.get(i));
-            }
+        for (List<Long> batch : batchList(new ArrayList<>(permissions.keySet()), QUERY_BATCH_SIZE)) {
+            String placeholders = batch.stream().map(_p -> "?").collect(Collectors.joining(","));
+            try (PreparedStatement ps = db.prepareStatement("select * from HIERARCHY_NODE where id in (" + placeholders + ")")) {
+                for (int i = 0; i < batch.size(); i++) {
+                    ps.setLong(i + 1, batch.get(i));
+                }
 
-            try (ResultSet rs = ps.executeQuery()) {
-                while (rs.next()) {
-                    if (rs.getString("childids") == null) {
-                        // this is the site!
-                        allChildNodeIds.add(rs.getLong("id"));
-                    } else {
-                        String childIdString = rs.getString("childids");
-                        List<Long> childIds = Arrays.asList(childIdString.split(":"))
-                                                .stream().filter((s) -> !s.trim().isEmpty())
-                                                .map(s -> Long.valueOf(s))
-                                                .collect(Collectors.toList());
-                        allChildNodeIds.addAll(childIds);
+                try (ResultSet rs = ps.executeQuery()) {
+                    while (rs.next()) {
+                        if (rs.getString("childids") == null) {
+                            // this is the site!
+                            allChildNodeIds.add(rs.getLong("id"));
+                        } else {
+                            String childIdString = rs.getString("childids");
+                            List<Long> childIds = Arrays.asList(childIdString.split(":"))
+                                    .stream().filter((s) -> !s.trim().isEmpty())
+                                    .map(s -> Long.valueOf(s))
+                                    .collect(Collectors.toList());
+                            allChildNodeIds.addAll(childIds);
+                        }
                     }
                 }
             }
@@ -346,53 +349,55 @@ public class BrightspaceMigratorHandler extends BasePortalHandler {
 
         // pull back corresponding site ids for those nodes (another hash)
         Map<Long, String> nodeIdToSiteRef = new HashMap<>();
-        placeholders = allChildNodeIds.stream().map(_p -> "?").collect(Collectors.joining(","));
-        try (PreparedStatement ps = db.prepareStatement("select * from HIERARCHY_NODE_META where id in (" + placeholders + ")")) {
-            List<Long> siteNodeIdsArr = new ArrayList<>(allChildNodeIds);
-            for (int i = 0; i < siteNodeIdsArr.size(); i++) {
-                ps.setLong(i + 1, siteNodeIdsArr.get(i));
-            }
+        for (List<Long> batch : batchList(new ArrayList<>(allChildNodeIds), QUERY_BATCH_SIZE)) {
+            String placeholders = batch.stream().map(_p -> "?").collect(Collectors.joining(","));
+            try (PreparedStatement ps = db.prepareStatement("select * from HIERARCHY_NODE_META where id in (" + placeholders + ")")) {
+                for (int i = 0; i < batch.size(); i++) {
+                    ps.setLong(i + 1, batch.get(i));
+                }
 
-            try (ResultSet rs = ps.executeQuery()) {
-                while (rs.next()) {
-                    String title = rs.getString("title");
-                    if (title.startsWith("/site/")) {
-                        nodeIdToSiteRef.put(rs.getLong("id"), title);
+                try (ResultSet rs = ps.executeQuery()) {
+                    while (rs.next()) {
+                        String title = rs.getString("title");
+                        if (title.startsWith("/site/")) {
+                            nodeIdToSiteRef.put(rs.getLong("id"), title);
+                        }
                     }
                 }
             }
         }
 
         // for each node with a site id, find the nearest parent with a permission (backwards walk)
-        placeholders = nodeIdToSiteRef.keySet().stream().map(_p -> "?").collect(Collectors.joining(","));
-        try (PreparedStatement ps = db.prepareStatement("select * from HIERARCHY_NODE where id in (" + placeholders + ")")) {
-            List<Long> nodeIds = new ArrayList<>(nodeIdToSiteRef.keySet());
-            for (int i = 0; i < nodeIds.size(); i++) {
-                ps.setLong(i + 1, nodeIds.get(i));
-            }
+        for (List<Long> batch : batchList(new ArrayList<>(nodeIdToSiteRef.keySet()), QUERY_BATCH_SIZE)) {
+            String placeholders = batch.stream().map(_p -> "?").collect(Collectors.joining(","));
+            try (PreparedStatement ps = db.prepareStatement("select * from HIERARCHY_NODE where id in (" + placeholders + ")")) {
+                for (int i = 0; i < batch.size(); i++) {
+                    ps.setLong(i + 1, batch.get(i));
+                }
 
-            try (ResultSet rs = ps.executeQuery()) {
-                while (rs.next()) {
-                    List<Long> nodeIdsTocheck = new ArrayList<>();
-                    Long currentNodeId = rs.getLong("id");
-                    nodeIdsTocheck.add(currentNodeId);
+                try (ResultSet rs = ps.executeQuery()) {
+                    while (rs.next()) {
+                        List<Long> nodeIdsTocheck = new ArrayList<>();
+                        Long currentNodeId = rs.getLong("id");
+                        nodeIdsTocheck.add(currentNodeId);
 
-                    if (rs.getString("parentids") != null) {
-                        String parentIdsString = rs.getString("parentids");
+                        if (rs.getString("parentids") != null) {
+                            String parentIdsString = rs.getString("parentids");
 
-                        List<Long> ancestors = Arrays.asList(parentIdsString.split(":"))
-                            .stream()
-                            .filter((s) -> !s.trim().isEmpty())
-                            .map((s) -> Long.valueOf(s))
-                            .collect(Collectors.toList());
+                            List<Long> ancestors = Arrays.asList(parentIdsString.split(":"))
+                                    .stream()
+                                    .filter((s) -> !s.trim().isEmpty())
+                                    .map((s) -> Long.valueOf(s))
+                                    .collect(Collectors.toList());
 
-                        Collections.reverse(ancestors);
-                        nodeIdsTocheck.addAll(ancestors);
-                    }
+                            Collections.reverse(ancestors);
+                            nodeIdsTocheck.addAll(ancestors);
+                        }
 
-                    for (Long nodeId : nodeIdsTocheck) {
-                        if (permissions.containsKey(nodeId) && Arrays.asList(SUPPORTED_DELEGATED_ACCESS_ROLES).contains(permissions.get(nodeId))) {
-                            siteRefs.add(nodeIdToSiteRef.get(currentNodeId));
+                        for (Long nodeId : nodeIdsTocheck) {
+                            if (permissions.containsKey(nodeId) && Arrays.asList(SUPPORTED_DELEGATED_ACCESS_ROLES).contains(permissions.get(nodeId))) {
+                                siteRefs.add(nodeIdToSiteRef.get(currentNodeId));
+                            }
                         }
                     }
                 }
@@ -400,6 +405,18 @@ public class BrightspaceMigratorHandler extends BasePortalHandler {
         }
 
         return siteRefs.stream().map(s -> s.split("/")[2]).collect(Collectors.toList());
+    }
+
+    private static <T> List<List<T>> batchList(List<T> inputList, final int maxSize) {
+        List<List<T>> sublists = new ArrayList<>();
+
+        final int size = inputList.size();
+
+        for (int i = 0; i < size; i += maxSize) {
+            sublists.add(new ArrayList<>(inputList.subList(i, Math.min(size, i + maxSize))));
+        }
+
+        return sublists;
     }
 
     private List<SiteToArchive> instructorSites() {
