@@ -313,6 +313,11 @@ public class BrightspaceMigratorHandler extends BasePortalHandler {
             }
         }
 
+        // No permissions found for netid, thanks for coming!
+        if (permissions.isEmpty()) {
+            return siteRefs;
+        }
+
         // find all node ids under those nodes
         Set<Long> allChildNodeIds = new HashSet<>();
         String placeholders = permissions.keySet().stream().map(_p -> "?").collect(Collectors.joining(","));
@@ -481,6 +486,7 @@ public class BrightspaceMigratorHandler extends BasePortalHandler {
             return sites;
         } catch (SQLException e) {
             M_log.error(this + ".instructorSites: " + e);
+            e.printStackTrace();
             return new ArrayList<>();
         } finally {
             if (db != null) {
