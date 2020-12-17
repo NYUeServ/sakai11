@@ -52,6 +52,7 @@ BrightspaceMigrator.prototype.refreshData = function() {
             $('#nyuBrightspaceMigratorModal tbody').append($('<tr><td colspan="3">Sorry, there are no sites available for export</td></tr>'));
           }
         } else {
+          var $targetTbody = $('#nyuBrightspaceMigratorModal tbody');
           self._data.sites.forEach(function(site) {
             var $tr = $('<tr>');
             $tr.data('site', site);
@@ -124,7 +125,7 @@ BrightspaceMigrator.prototype.refreshData = function() {
             } else {
               $tr.append($('<td>').html($('<button class="btn-primary nyu-trigger-brightspace-migration">Queue for Export</button>')));
             }
-            $('#nyuBrightspaceMigratorModal tbody').append($tr);
+            $targetTbody.append($tr);
           });
         }
         $('#nyuBrightspaceMigratorModal .brightspace-migrator-filter-term').empty();
