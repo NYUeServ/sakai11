@@ -16,6 +16,8 @@ BrightspaceMigrator.prototype.init = function() {
   this.$button.on('click', $.proxy(this.handleClick, this));
 
   $('#mastLogin .Mrphs-userNav__subnav .Mrphs-userNav__logout').before($menuItem);
+
+  this.currentPage = 0;
 }
 
 BrightspaceMigrator.prototype.handleClick = function() {
@@ -39,6 +41,7 @@ BrightspaceMigrator.prototype.refreshData = function() {
       data: {
         'term': self.termFilter || '',
         'q': self.queryFilter || '',
+        'page': self.currentPage,
       },
       dataType: 'json',
       method: 'GET',
@@ -128,6 +131,15 @@ BrightspaceMigrator.prototype.refreshData = function() {
             $targetTbody.append($tr);
           });
         }
+
+        if (self._data.has_previous_page || self._data.has_next_page) {
+          $('#nyuBrightspaceMigratorModal .brightspace-migrator-pagination').show();
+          $('#nyuBrightspaceMigratorModal .brightspace-migrator-previous').prop('disabled', !self._data.has_previous_page);
+          $('#nyuBrightspaceMigratorModal .brightspace-migrator-next').prop('disabled', !self._data.has_next_page);
+        } else {
+          $('#nyuBrightspaceMigratorModal .brightspace-migrator-pagination').hide();
+        }
+
         $('#nyuBrightspaceMigratorModal .brightspace-migrator-filter-term').empty();
         $('#nyuBrightspaceMigratorModal .brightspace-migrator-filter-term').append($('<option>'));
         self._data.terms.forEach(function(term) {
@@ -140,6 +152,7 @@ BrightspaceMigrator.prototype.refreshData = function() {
         $('#nyuBrightspaceMigratorModal .brightspace-migrator-filter-term').on('change', function() {
           if (self.termFilter !== $(this).val()) {
             self.termFilter = $(this).val();
+            self.currentPage = 0;
             self.refreshData();
           }
         });
@@ -154,6 +167,7 @@ BrightspaceMigrator.prototype.refreshData = function() {
           typingDelay = setTimeout(function() {
             if (self.queryFilter !== $input.val()) {
               self.queryFilter = $input.val();
+              self.currentPage = 0;
               self.refreshData();
             }
           }, 500);
@@ -166,6 +180,7 @@ BrightspaceMigrator.prototype.refreshData = function() {
         $('#nyuBrightspaceMigratorModal .brightspace-migrator-filter-clear').on('click', function() {
           self.queryFilter = '';
           self.termFilter = '';
+          self.currentPage = 0;
           self.refreshData();
         });
 
@@ -204,6 +219,16 @@ BrightspaceMigrator.prototype.showDialog = function() {
       }, function() {
           self.refreshData();
       });
+    })
+    .on('click', '.brightspace-migrator-previous', function(event) {
+      event.preventDefault();
+      self.currentPage = self.currentPage - 1;
+      self.refreshData();
+    })
+    .on('click', '.brightspace-migrator-next', function(event) {
+      event.preventDefault();
+      self.currentPage = self.currentPage + 1;
+      self.refreshData();
     });
   $('#nyuBrightspaceMigratorModal').modal();
 }
