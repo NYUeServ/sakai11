@@ -32,7 +32,7 @@ public class BrightspaceMigratorHandler extends BasePortalHandler {
 
     private static final int QUERY_BATCH_SIZE = 1000;
 
-    private static final int PAGE_SIZE = 3;
+    private static final int PAGE_SIZE = 50;
 
     private SqlService sqlService;
     private static Log M_log = LogFactory.getLog(BrightspaceMigratorHandler.class);
