@@ -32,7 +32,7 @@ BrightspaceMigrator.prototype.handleClick = function() {
   self.showDialog();
 }
 
-BrightspaceMigrator.prototype.refreshData = function() {
+BrightspaceMigrator.prototype.refreshData = function(callback) {
   var self = this;
   if (self.on) {
     $.ajax({
@@ -185,6 +185,10 @@ BrightspaceMigrator.prototype.refreshData = function() {
         });
 
         $(window).off('resize', self.handleResize).on('resize', self.handleResize);
+
+        if (callback) {
+          callback();
+        }
       }
     });
   }
@@ -223,12 +227,16 @@ BrightspaceMigrator.prototype.showDialog = function() {
     .on('click', '.brightspace-migrator-previous', function(event) {
       event.preventDefault();
       self.currentPage = self.currentPage - 1;
-      self.refreshData();
+      self.refreshData(function() {
+        $('#nyuBrightspaceMigratorModal .modal-body')[0].scrollTop = 0;
+      });
     })
     .on('click', '.brightspace-migrator-next', function(event) {
       event.preventDefault();
       self.currentPage = self.currentPage + 1;
-      self.refreshData();
+      self.refreshData(function() {
+        $('#nyuBrightspaceMigratorModal .modal-body')[0].scrollTop = 0;
+      });
     });
   $('#nyuBrightspaceMigratorModal').modal();
 }
