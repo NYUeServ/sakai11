@@ -184,6 +184,8 @@ public class BrightspaceMigratorHandler extends BasePortalHandler {
 
         String netid = UserDirectoryService.getCurrentUser().getEid();
 
+        Set<String> allowedTermEids = allowedTermEids();
+
         Connection db = null;
         try {
             db = sqlService.borrowConnection();
@@ -195,10 +197,19 @@ public class BrightspaceMigratorHandler extends BasePortalHandler {
                 ps.setString(1, netid);
                 try (ResultSet rs = ps.executeQuery()) {
                     while (rs.next()) {
-                        result.add(rs.getString("term"));
+                        String term = rs.getString("term");
+                        if (allowedTermEids.contains(term)) {
+                            result.add(term);
+                        }
                     }
                 }
             }
+
+            List<String> termOrdering = orderedTerms(db);
+            Collections.sort(result, (t1, t2) -> {
+                return termOrdering.indexOf(t1) - termOrdering.indexOf(t2);
+            });
+
         } catch (SQLException e) {
             M_log.warn(this + ".instructorTerms: " + e);
             e.printStackTrace();
@@ -437,18 +448,7 @@ public class BrightspaceMigratorHandler extends BasePortalHandler {
 
             List<SiteToArchive> sites = new ArrayList<>(results.values());
 
-            List<String> termOrdering = new ArrayList<>();
-            try (PreparedStatement ps = db.prepareStatement("select cle_eid from nyu_t_acad_session order by strm desc")) {
-                try (ResultSet rs = ps.executeQuery()) {
-                    while (rs.next()) {
-                        termOrdering.add(rs.getString("cle_eid"));
-                    }
-                }
-            }
-
-            termOrdering.add("Sandboxes");
-            termOrdering.add("Project");
-
+            List<String> termOrdering = orderedTerms(db);
             Collections.sort(sites, (s1, s2) -> {
                 return termOrdering.indexOf(s1.term) - termOrdering.indexOf(s2.term);
             });
@@ -463,6 +463,23 @@ public class BrightspaceMigratorHandler extends BasePortalHandler {
                 sqlService.returnConnection(db);
             }
         }
+    }
+
+    private List<String> orderedTerms(Connection db) throws SQLException {
+        List<String> result = new ArrayList<>();
+
+        try (PreparedStatement ps = db.prepareStatement("select cle_eid from nyu_t_acad_session order by strm desc")) {
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    result.add(rs.getString("cle_eid"));
+                }
+            }
+        }
+
+        result.add("Sandboxes");
+        result.add("Project");
+
+        return result;
     }
 
     private void queueSiteForArchive(String siteId) {
