@@ -191,7 +191,7 @@ BrightspaceMigrator.prototype.refreshData = function() {
 }
 
 BrightspaceMigrator.prototype.handleResize = function() {
-  $('#nyuBrightspaceMigratorModal .modal-dialog .modal-body').height(Math.max(300, $(window).height() - 240));
+  $('#nyuBrightspaceMigratorModal .modal-dialog .modal-body').height(Math.max(300, $(window).height() - 250));
 }
 
 BrightspaceMigrator.prototype.showDialog = function() {
