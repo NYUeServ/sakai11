@@ -20,7 +20,378 @@ import javax.servlet.http.HttpServletResponse;
 import java.sql.*;
 import java.util.*;
 
+import java.io.IOException;
+import java.io.File;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
+
+import com.zaxxer.hikari.HikariDataSource;
+import java.util.stream.Collectors;
+import java.util.concurrent.atomic.AtomicReference;
+
 public class BrightspaceMigratorHandler extends BasePortalHandler {
+
+    private static class MigratorDatabase {
+        private static Log M_log = LogFactory.getLog(MigratorDatabase.class);
+
+        public static AtomicReference<MigratorDatabase> instance = new AtomicReference<>(new MigratorDatabase());
+
+        private String masterDBPath;
+        private String workingDBPath;
+        private HikariDataSource dataSource;
+
+        Thread refreshThread;
+
+        public MigratorDatabase() {
+            this.masterDBPath = HotReloadConfigurationService.getString("brightspace.selfservice.masterdb", "/shared/sakai/self_service.db");
+            this.workingDBPath = HotReloadConfigurationService.getString("brightspace.selfservice.workingdb", "/tmp/self_service_workdb.db");
+
+            try {
+                copyLatest();
+            } catch (Exception e) {
+                M_log.error("FAILURE LOADING MIGRATOR DATABASE: " + e);
+                e.printStackTrace();
+            }
+
+            this.refreshThread = startRefreshThread();
+
+            HikariDataSource ds = new HikariDataSource();
+            ds.setDriverClassName("org.sqlite.JDBC");
+            ds.setJdbcUrl("jdbc:sqlite:" + workingDBPath);
+            ds.setMaxLifetime(30000);
+
+            this.dataSource = ds;
+        }
+
+        public void close() {
+            dataSource.close();
+        }
+
+        // NOTE: assumes masterDBPath is written atomically.  Make sure you write to a
+        // temp file + rename when generating it.
+        private void copyLatest() {
+            try {
+                Path tempPath = Paths.get(workingDBPath + "." + java.util.UUID.randomUUID().toString());
+
+                Files.copy(Paths.get(masterDBPath),
+                           tempPath,
+                           StandardCopyOption.REPLACE_EXISTING);
+
+                Files.move(tempPath, Paths.get(workingDBPath), StandardCopyOption.ATOMIC_MOVE);
+            } catch (IOException e) {
+                M_log.error("Error from BrightspaceMigratorHandler::copyLatest: " + e);
+                e.printStackTrace();
+
+                throw new RuntimeException(e);
+            }
+        }
+
+        private boolean needsRefresh() {
+            if (!new File(workingDBPath).exists() || new File(masterDBPath).lastModified() > new File(workingDBPath).lastModified()) {
+                return true;
+            }
+
+            // Or if our underlying config has changed
+            String updatedMasterDBPath = HotReloadConfigurationService.getString("brightspace.selfservice.masterdb", "/shared/sakai/self_service.db");
+            String updatedWorkingDBPath = HotReloadConfigurationService.getString("brightspace.selfservice.workingdb", "/tmp/self_service_workdb.db");
+
+            if (!this.masterDBPath.equals(updatedMasterDBPath)) {
+                return true;
+            }
+
+            if (!this.workingDBPath.equals(updatedWorkingDBPath)) {
+                return true;
+            }
+
+            return false;
+        }
+
+        private Thread startRefreshThread() {
+            Thread refresh = new Thread(() -> {
+                    Thread.currentThread().setName("BrightspaceMigratorHandler::startRefreshThread");
+                    M_log.info("BrightspaceMigratorHandler::startRefreshThread starting up");
+                    while (!Thread.interrupted()) {
+                        try {
+                            if (needsRefresh()) {
+                                M_log.info("Refreshing self service database from new copy");
+                                MigratorDatabase oldInstance = MigratorDatabase.instance.getAndSet(new MigratorDatabase());
+
+                                M_log.info("Old thread shutting down");
+
+                                try {
+                                    Thread.sleep(60000);
+                                } catch (InterruptedException e) {
+                                    Thread.currentThread().interrupt();
+                                    break;
+                                }
+
+                                oldInstance.close();
+                                Thread.currentThread().interrupt();
+                                break;
+                            }
+
+                            try {
+                                Thread.sleep(60000);
+                            } catch (InterruptedException e) {
+                                Thread.currentThread().interrupt();
+                                break;
+                            }
+                        } catch (Throwable t) {
+                            M_log.error("BrightspaceMigratorHandler::startRefreshThread caught (and ignored) unhandled error: " + t);
+                            t.printStackTrace();
+                            try {
+                                Thread.sleep(1000);
+                            } catch (InterruptedException e) {
+                                Thread.currentThread().interrupt();
+                                break;
+                            }
+                        }
+                    }
+            });
+
+            refresh.setDaemon(true);
+            refresh.start();
+
+            return refresh;
+        }
+
+        private Connection getConnection() throws SQLException {
+            return dataSource.getConnection();
+        }
+
+        public InstructorSitePage instructorSites(String netid, String termFilter, String queryFilter, int page, int page_size) throws SQLException {
+            Map<String, SiteToArchive> results = new LinkedHashMap<>();
+
+            List<String> replacements = new ArrayList<>();
+            replacements.add(netid);
+
+            String termFilterSQL = "";
+            if (termFilter != null) {
+                termFilterSQL = " and sss.term = ? ";
+                replacements.add(termFilter);
+            }
+
+            String querySubSelect = "select site_id from NYU_T_SELFSERV_SITES";
+            if (queryFilter != null && queryFilter.length() >= 3) {
+                querySubSelect = "select sss.site_id" +
+                    " from NYU_T_SELFSERV_MIG_ACCESS ma" +
+                    " inner join NYU_T_SELFSERV_SITES sss on sss.site_id = ma.site_id" +
+                    " left join NYU_T_SELFSERV_INSTRS ssi on ssi.site_id = sss.site_id" +
+                    " left join NYU_T_SELFSERV_ROSTERS ssr on ssr.site_id = sss.site_id" +
+                    " where ma.netid = ?" +
+                    " and (ssi.netid = ? or ssr.roster_id = ? or instr(lower(sss.title), lower(?)) >= 1)";
+
+                replacements.add(netid);
+                replacements.add(queryFilter);
+                replacements.add(queryFilter);
+                replacements.add(queryFilter);
+            }
+
+            Connection db = null;
+            try {
+                db = getConnection();
+
+                try (PreparedStatement ps = db.prepareStatement("select sss.*" +
+                                                                " from NYU_T_SELFSERV_MIG_ACCESS ma" +
+                                                                " inner join NYU_T_SELFSERV_SITES sss on sss.site_id = ma.site_id" +
+                                                                " where ma.netid = ?" +
+                                                                termFilterSQL +
+                                                                " and sss.site_id in (" + querySubSelect + ")" +
+                                                                " order by sss.term_sort desc, sss.site_id asc" +
+                                                                String.format(" limit %d offset %d", page_size + 1, page_size * page))) {
+                    for (int i=0; i<replacements.size(); i++) {
+                        ps.setString(i+1, replacements.get(i));
+                    }
+
+                    try (ResultSet rs = ps.executeQuery()) {
+                        while (rs.next()) {
+                            String siteId = rs.getString("site_id");
+                            String termEid = rs.getString("term");
+
+                            SiteToArchive siteToArchive = new SiteToArchive();
+                            siteToArchive.siteId = siteId;
+                            siteToArchive.title = rs.getString("title");
+                            siteToArchive.term = rs.getString("term");
+                            siteToArchive.department = rs.getString("department");
+                            siteToArchive.school = rs.getString("school");
+                            siteToArchive.location = rs.getString("location");
+                            if (siteToArchive.term == null) {
+                                siteToArchive.term = StringUtils.capitalize(rs.getString("site_type"));
+                            }
+
+                            results.put(siteId, siteToArchive);
+                        }
+                    }
+                }
+
+                // Instructors
+                List<String> siteIds = new ArrayList<>(results.keySet());
+                String placeholders = results.keySet().stream().map(_siteId -> "?").collect(Collectors.joining(","));
+                try (PreparedStatement ps = db.prepareStatement("select site_id, netid, fname, lname" +
+                                                                " from NYU_T_SELFSERV_INSTRS" +
+                                                                " where site_id in (" + placeholders + ")")) {
+                    for (int i = 0; i < siteIds.size(); i++) {
+                        ps.setString(i + 1, siteIds.get(i));
+                    }
+
+                    try (ResultSet rs = ps.executeQuery()) {
+                        while (rs.next()) {
+                            String siteId = rs.getString("site_id");
+
+                            SiteToArchive siteToArchive = results.get(siteId);
+
+                            String instructorNetid = rs.getString("netid");
+                            String instructorFirstName = rs.getString("fname");
+                            String instructorLastName = rs.getString("lname");
+
+                            if (instructorNetid != null) {
+                                if (instructorFirstName != null && instructorLastName != null) {
+                                    siteToArchive.instructors.put(instructorNetid, String.format("%s %s (%s)", instructorFirstName, instructorLastName, instructorNetid));
+                                } else {
+                                    siteToArchive.instructors.put(instructorNetid, instructorNetid);
+                                }
+                            }
+                        }
+                    }
+                }
+
+
+                // Rosters
+                try (PreparedStatement ps = db.prepareStatement("select site_id, roster_id" +
+                                                                " from NYU_T_SELFSERV_ROSTERS" +
+                                                                " where site_id in (" + placeholders + ")")) {
+                    for (int i = 0; i < siteIds.size(); i++) {
+                        ps.setString(i + 1, siteIds.get(i));
+                    }
+
+                    try (ResultSet rs = ps.executeQuery()) {
+                        while (rs.next()) {
+                            String siteId = rs.getString("site_id");
+
+                            SiteToArchive siteToArchive = results.get(siteId);
+
+                            siteToArchive.rosters.add(rs.getString("roster_id"));
+                        }
+                    }
+                }
+
+                InstructorSitePage result = new InstructorSitePage();
+                result.sites = new ArrayList<>(results.values());
+                result.hasNextPage = result.sites.size() > page_size;
+                result.hasPreviousPage = page > 0;
+                if (result.hasNextPage) {
+                    // Remove our extra sentinel value
+                    result.sites.remove(result.sites.size() - 1);
+                }
+
+                return result;
+            } catch (SQLException e) {
+                M_log.error("instructorSites: " + e);
+                e.printStackTrace();
+
+                InstructorSitePage result = new InstructorSitePage();
+                result.sites = new ArrayList<>();
+                result.hasNextPage = false;
+                result.hasPreviousPage = false;
+
+                return result;
+            } finally {
+                if (db != null) {
+                    db.close();
+                }
+            }
+        }
+
+        public List<String> instructorTerms(String netid) throws SQLException {
+            List<String> result = new ArrayList<>();
+
+            Connection db = null;
+            try {
+                db = getConnection();
+
+                try (PreparedStatement ps = db.prepareStatement("select a.term" +
+                                                                " from (" +
+                                                                "  select distinct sss.term, sss.term_sort" +
+                                                                "   from NYU_T_SELFSERV_MIG_ACCESS ma" +
+                                                                "   inner join NYU_T_SELFSERV_SITES sss on sss.site_id = ma.site_id" +
+                                                                "   where ma.netid = ?" +
+                                                                " ) a" +
+                                                                "  order by a.term_sort desc")) {
+                    ps.setString(1, netid);
+                    try (ResultSet rs = ps.executeQuery()) {
+                        while (rs.next()) {
+                            result.add(rs.getString("term"));
+                        }
+                    }
+                }
+            } catch (SQLException e) {
+                M_log.error(".instructorTerms: " + e);
+                e.printStackTrace();
+            } finally {
+                if (db != null) {
+                    db.close();
+                }
+            }
+
+            return result;
+        }
+
+        private PreparedStatement matchQueryFor(Connection db, String netid, String schoolCode, String maybeDepartment) throws SQLException {
+            if (maybeDepartment == null) {
+                PreparedStatement ps = db.prepareStatement("select count(1) count" +
+                                                           " from nyu_t_selfserv_mig_access ma" +
+                                                           " inner join nyu_t_selfserv_sites sss on sss.site_id = ma.site_id" +
+                                                           " where ma.netid = ? AND sss.school = ?");
+                ps.setString(1, netid);
+                ps.setString(2, schoolCode);
+
+                return ps;
+            } else {
+                PreparedStatement ps = db.prepareStatement("select count(1) count" +
+                                                           " from nyu_t_selfserv_mig_access ma" +
+                                                           " inner join nyu_t_selfserv_sites sss on sss.site_id = ma.site_id" +
+                                                           " where ma.netid = ? AND sss.school = ? AND sss.department = ?");
+                ps.setString(1, netid);
+                ps.setString(2, schoolCode);
+                ps.setString(3, maybeDepartment);
+
+                return ps;
+            }
+        }
+
+        public boolean userHasMatchingSite(String netid, String schoolCode, String maybeDepartment) throws SQLException {
+            Connection db = null;
+            try {
+                db = getConnection();
+
+                try (PreparedStatement ps = matchQueryFor(db, netid, schoolCode, maybeDepartment)) {
+                    try (ResultSet rs = ps.executeQuery()) {
+                        while (rs.next()) {
+                            return rs.getInt("count") > 0;
+                        }
+                    }
+                }
+            } catch (SQLException e) {
+                M_log.error("userHasMatchingSite: " + e);
+                e.printStackTrace();
+            } finally {
+                if (db != null) {
+                    db.close();
+                }
+            }
+
+            return false;
+        }
+
+        public static class InstructorSitePage {
+            public List<SiteToArchive> sites;
+            public boolean hasNextPage;
+            public boolean hasPreviousPage;
+        }
+    }
+
 
     private static final String URL_FRAGMENT = "brightspace-migrator";
     private static final String SESSION_KEY_ALLOWED_TO_MIGRATE = "NYU_ALLOWED_TO_MIGRATE";
@@ -50,6 +421,51 @@ public class BrightspaceMigratorHandler extends BasePortalHandler {
         }
     }
 
+    private void populateRequestStatus(List<SiteToArchive> sites) {
+        if (sites.isEmpty()) {
+            return;
+        }
+
+        Connection db = null;
+        try {
+            db = sqlService.borrowConnection();
+
+            String placeholders = sites.stream().map(_s -> "?").collect(Collectors.joining(","));
+
+            try (PreparedStatement ps = db.prepareStatement("select * from NYU_T_SITE_ARCHIVES_QUEUE where site_id in (" + placeholders + ")")) {
+                for (int i = 0; i < sites.size(); i++) {
+                    ps.setString(i + 1, sites.get(i).siteId);
+                }
+
+                Map<String, SiteToArchive> siteIdToSiteToArchive = new HashMap<>();
+                for (SiteToArchive s : sites) {
+                    siteIdToSiteToArchive.put(s.siteId, s);
+                }
+
+                try (ResultSet rs = ps.executeQuery()) {
+                    while (rs.next()) {
+                        SiteArchiveRequest request = new SiteArchiveRequest();
+                        request.queuedAt = rs.getLong("queued_at");
+                        request.queuedBy = rs.getString("queued_by");
+                        request.archivedAt = rs.getLong("archived_at");
+                        request.uploadedAt = rs.getLong("uploaded_at");
+                        request.completedAt = rs.getLong("completed_at");
+                        request.brightspaceOrgUnitId = rs.getLong("brightspace_org_unit_id");
+
+                        SiteToArchive siteToArchive = siteIdToSiteToArchive.get(rs.getString("site_id"));
+                        siteToArchive.requests.add(request);
+                    }
+                }
+            }
+        } catch (SQLException e) {
+            M_log.warn(this + ".populateRequestStatus: " + e);
+        } finally {
+            if (db != null) {
+                sqlService.returnConnection(db);
+            }
+        }
+    }
+
     @Override
     public int doGet(String[] parts, HttpServletRequest req, HttpServletResponse res,
                      Session session) throws PortalHandlerException
@@ -75,26 +491,17 @@ public class BrightspaceMigratorHandler extends BasePortalHandler {
                     page = Integer.valueOf(pageStr);
                 }
 
-                List<SiteToArchive> allSites = instructorSites(termFilter, queryFilter);
-                int minCurrentPageIndex = Math.max(page * PAGE_SIZE, 0);
-                int maxCurrentPageIndex = Math.min(allSites.size(), (page + 1) *  PAGE_SIZE);
+                String netid = UserDirectoryService.getCurrentUser().getEid();
 
-            
-                List<SiteToArchive> currentPage = Collections.emptyList();
-                if (minCurrentPageIndex <= maxCurrentPageIndex) {
-                    currentPage = allSites.subList(minCurrentPageIndex, maxCurrentPageIndex);
-                } else {
-                    page = 0;
-                }
+                MigratorDatabase.InstructorSitePage sitesPage = MigratorDatabase.instance.get().instructorSites(netid, termFilter, queryFilter, page, PAGE_SIZE);
 
-                boolean hasPrevious = page > 0;
-                boolean hasNext = allSites.size() > maxCurrentPageIndex;
+                populateRequestStatus(sitesPage.sites);
 
                 obj.put("page", page);
-                obj.put("has_previous_page", hasPrevious);
-                obj.put("has_next_page", hasNext);
+                obj.put("has_previous_page", sitesPage.hasPreviousPage);
+                obj.put("has_next_page", sitesPage.hasNextPage);
 
-                for (SiteToArchive site : currentPage) {
+                for (SiteToArchive site : sitesPage.sites) {
                     JSONObject siteJSON = new JSONObject();
                     siteJSON.put("site_id", site.siteId);
                     siteJSON.put("title", site.title);
@@ -133,11 +540,12 @@ public class BrightspaceMigratorHandler extends BasePortalHandler {
                 obj.put("sites", sitesJSON);
 
                 JSONArray termsJSON = new JSONArray();
-                for (String term : instructorTerms()) {
+                for (String term : MigratorDatabase.instance.get().instructorTerms(netid)) {
                     termsJSON.add(term);
                 }
                 obj.put("terms", termsJSON);
 
+                res.setHeader("Content-type", "text/json");
                 res.getWriter().write(obj.toString());
 
                 return END;
@@ -168,7 +576,9 @@ public class BrightspaceMigratorHandler extends BasePortalHandler {
                 if (siteId != null && SecurityService.unlock("site.upd", "/site/" + siteId)) {
                     queueSiteForArchive(siteId);
                 }
-                res.getWriter().write("{'success':true}");
+
+                res.setHeader("Content-type", "text/json");
+                res.getWriter().write("{\"success\":true}");
 
                 return END;
             } catch (Exception e) {
@@ -179,48 +589,6 @@ public class BrightspaceMigratorHandler extends BasePortalHandler {
         return NEXT;
     }
 
-    private List<String> instructorTerms() {
-        List<String> result = new ArrayList<>();
-
-        String netid = UserDirectoryService.getCurrentUser().getEid();
-
-        Set<String> allowedTermEids = allowedTermEids();
-
-        Connection db = null;
-        try {
-            db = sqlService.borrowConnection();
-
-            try (PreparedStatement ps = db.prepareStatement("select distinct nvl(sss.term, initcap(sss.site_type)) as term" +
-                    " from NYU_T_SELFSERV_MIG_ACCESS ma" +
-                    " inner join NYU_T_SELFSERV_SITES sss on sss.site_id = ma.site_id" +
-                    " where ma.netid = ?")) {
-                ps.setString(1, netid);
-                try (ResultSet rs = ps.executeQuery()) {
-                    while (rs.next()) {
-                        String term = rs.getString("term");
-                        if (allowedTermEids.contains(term)) {
-                            result.add(term);
-                        }
-                    }
-                }
-            }
-
-            List<String> termOrdering = orderedTerms(db);
-            Collections.sort(result, (t1, t2) -> {
-                return termOrdering.indexOf(t1) - termOrdering.indexOf(t2);
-            });
-
-        } catch (SQLException e) {
-            M_log.warn(this + ".instructorTerms: " + e);
-            e.printStackTrace();
-        } finally {
-            if (db != null) {
-                sqlService.returnConnection(db);
-            }
-        }
-
-        return result;
-    }
 
     public boolean isAllowedToMigrateSitesToBrightspace() {
         if (!"true".equals(HotReloadConfigurationService.getString("brightspace.selfservice.enabled", "true"))) {
@@ -306,18 +674,17 @@ public class BrightspaceMigratorHandler extends BasePortalHandler {
             try {
                 db = sqlService.borrowConnection();
 
-                RuleSet ruleSet = new RuleSet();
-
                 try (PreparedStatement ps = db.prepareStatement("select * " +
                                                                 " from NYU_T_SELF_SERVICE_ACCESS ssa" +
                                                                 " where ssa.rule_type != 'netid'");
                      ResultSet rs = ps.executeQuery()) {
                     while (rs.next()) {
-                        ruleSet.addRule(rs.getString("school"), rs.getString("department"));
+                        if (MigratorDatabase.instance.get().userHasMatchingSite(netid, rs.getString("school"), rs.getString("department"))) {
+                            result = true;
+                            break;
+                        }
                     }
                 }
-
-                result = instructorSites().stream().anyMatch(s -> ruleSet.matches(s));
             } catch (SQLException e) {
                 M_log.warn(this + ".netIdExplicitlyAllowed: " + e);
             } finally {
@@ -333,154 +700,6 @@ public class BrightspaceMigratorHandler extends BasePortalHandler {
         return (boolean)session.getAttribute(SESSION_KEY_RULE_LAST_VALUE);
     }
 
-    private List<SiteToArchive> instructorSites() {
-        return instructorSites(null, null);
-    }
-
-    private List<SiteToArchive> instructorSites(String termFilter, String queryFilter) {
-        String netid = UserDirectoryService.getCurrentUser().getEid();
-        Map<String, SiteToArchive> results = new HashMap<>();
-        Set<String> allowedTermEids = allowedTermEids();
-
-        List<String> replacements = new ArrayList<>();
-        replacements.add(netid);
-
-        String termFilterSQL = "";
-        if (termFilter != null) {
-            termFilterSQL = " and (sss.term = ? or (sss.term is null and sss.site_type = lower(?))) ";
-            replacements.add(termFilter);
-            replacements.add(termFilter);
-        }
-        
-        String querySubSelect = "select site_id from NYU_T_SELFSERV_SITES";
-        if (queryFilter != null && queryFilter.length() >= 3) {
-            querySubSelect = "select sss.site_id" +
-                             " from NYU_T_SELFSERV_MIG_ACCESS ma" +
-                             " inner join NYU_T_SELFSERV_SITES sss on sss.site_id = ma.site_id" +
-                             " left join NYU_T_SELFSERV_INSTRS ssi on ssi.site_id = sss.site_id" +
-                             " left join NYU_T_SELFSERV_ROSTERS ssr on ssr.site_id = sss.site_id" +
-                             " where ma.netid = ?" +
-                             " and (ssi.netid = ? or ssr.roster_id = ? or instr(lower(sss.title), lower(?)) >= 1)";
-
-            replacements.add(netid);
-            replacements.add(queryFilter);
-            replacements.add(queryFilter);
-            replacements.add(queryFilter);
-        }
-
-        Connection db = null;
-        try {
-            db = sqlService.borrowConnection();
-
-            try (PreparedStatement ps = db.prepareStatement("select sss.*, ssi.netid, ssi.fname, ssi.lname, ssr.roster_id, aq.queued_by, aq.queued_at, aq.archived_at, aq.uploaded_at, aq.completed_at, aq.brightspace_org_unit_id" +
-                    " from NYU_T_SELFSERV_MIG_ACCESS ma" +
-                    " inner join NYU_T_SELFSERV_SITES sss on sss.site_id = ma.site_id" +
-                    " left join NYU_T_SELFSERV_INSTRS ssi on ssi.site_id = sss.site_id" +
-                    " left join NYU_T_SELFSERV_ROSTERS ssr on ssr.site_id = sss.site_id" +
-                    " left join NYU_T_SITE_ARCHIVES_QUEUE aq on aq.site_id = sss.site_id" +
-                    " where ma.netid = ?" +
-                    termFilterSQL + 
-                    " and sss.site_id in (" + querySubSelect + ")"
-                    )) {
-                
-                for (int i=0; i<replacements.size(); i++) {
-                    ps.setString(i+1, replacements.get(i));
-                }
-
-                ResultSet rs = ps.executeQuery();
-                try {
-                    while (rs.next()) {
-                        String siteId = rs.getString("site_id");
-                        String termEid = rs.getString("term");
-
-                        if (termEid != null && !allowedTermEids.contains(termEid)) {
-                            continue;
-                        }
-
-                        if (!results.containsKey(siteId)) {
-                            SiteToArchive siteToArchive = new SiteToArchive();
-                            siteToArchive.siteId = siteId;
-                            siteToArchive.title = rs.getString("title");
-                            siteToArchive.term = rs.getString("term");
-                            siteToArchive.department = rs.getString("department");
-                            siteToArchive.school = rs.getString("school");
-                            siteToArchive.location = rs.getString("location");
-                            if (siteToArchive.term == null) {
-                                siteToArchive.term = StringUtils.capitalize(rs.getString("site_type"));
-                            }
-
-                            if (rs.getString("queued_by") != null) {
-                                SiteArchiveRequest request = new SiteArchiveRequest();
-                                request.queuedAt = rs.getLong("queued_at");
-                                request.queuedBy = rs.getString("queued_by");
-                                request.archivedAt = rs.getLong("archived_at");
-                                request.uploadedAt = rs.getLong("uploaded_at");
-                                request.completedAt = rs.getLong("completed_at");
-                                request.brightspaceOrgUnitId = rs.getLong("brightspace_org_unit_id");
-                                siteToArchive.requests.add(request);
-                            }
-
-                            results.put(siteId, siteToArchive);
-                        }
-
-                        SiteToArchive siteToArchive = results.get(siteId);
-
-                        String instructorNetid = rs.getString("netid");
-                        String instructorFirstName = rs.getString("fname");
-                        String instructorLastName = rs.getString("lname");
-                        if (instructorNetid != null) {
-                            if (instructorFirstName != null && instructorLastName != null) {
-                                siteToArchive.instructors.put(instructorNetid, String.format("%s %s (%s)", instructorFirstName, instructorLastName, instructorNetid));
-                            } else {
-                                siteToArchive.instructors.put(instructorNetid, instructorNetid);
-                            }
-                        }
-
-                        String rosterId = rs.getString("roster_id");
-                        if (rosterId != null) {
-                            siteToArchive.rosters.add(rosterId);
-                        }
-                    }
-                } finally {
-                    rs.close();
-                }
-            }
-
-            List<SiteToArchive> sites = new ArrayList<>(results.values());
-
-            List<String> termOrdering = orderedTerms(db);
-            Collections.sort(sites, (s1, s2) -> {
-                return termOrdering.indexOf(s1.term) - termOrdering.indexOf(s2.term);
-            });
-
-            return sites;
-        } catch (SQLException e) {
-            M_log.error(this + ".instructorSites: " + e);
-            e.printStackTrace();
-            return new ArrayList<>();
-        } finally {
-            if (db != null) {
-                sqlService.returnConnection(db);
-            }
-        }
-    }
-
-    private List<String> orderedTerms(Connection db) throws SQLException {
-        List<String> result = new ArrayList<>();
-
-        try (PreparedStatement ps = db.prepareStatement("select cle_eid from nyu_t_acad_session order by strm desc")) {
-            try (ResultSet rs = ps.executeQuery()) {
-                while (rs.next()) {
-                    result.add(rs.getString("cle_eid"));
-                }
-            }
-        }
-
-        result.add("Sandboxes");
-        result.add("Project");
-
-        return result;
-    }
 
     private void queueSiteForArchive(String siteId) {
         String netid = UserDirectoryService.getCurrentUser().getEid();
@@ -506,12 +725,7 @@ public class BrightspaceMigratorHandler extends BasePortalHandler {
         }
     }
 
-    private Set<String> allowedTermEids() {
-        String termEidsStr = HotReloadConfigurationService.getString("brightspace.selfservice.termeids", "").trim();
-        return new HashSet<>(Arrays.asList(termEidsStr.split(" *, *")));
-    }
-
-    private class SiteToArchive {
+    private static class SiteToArchive {
         public String siteId;
         public String title;
         public String term;
@@ -523,7 +737,7 @@ public class BrightspaceMigratorHandler extends BasePortalHandler {
         public Map<String, String> instructors = new HashMap<>();
     }
 
-    private class SiteArchiveRequest {
+    private static class SiteArchiveRequest {
         public String queuedBy;
         public long queuedAt;
         public long archivedAt;
@@ -543,38 +757,6 @@ public class BrightspaceMigratorHandler extends BasePortalHandler {
             } else {
                 return "READY_FOR_ARCHIVE";
             }
-        }
-    }
-
-    private class AccessRule {
-        public String school;
-        public String department;
-    }
-
-    private class RuleSet {
-        public Map<String, List<AccessRule>> rules = new HashMap<>();
-
-        public void addRule(String school, String department) {
-            if (!rules.containsKey(school)) {
-                rules.put(school, new ArrayList<>());
-            }
-            AccessRule rule = new AccessRule();
-            rule.school = school;
-            rule.department = department;
-
-            rules.get(school).add(rule);
-        }
-
-        public boolean matches(SiteToArchive site) {
-            if (rules.containsKey(site.school)) {
-                List<AccessRule> matched = rules.get(site.school);
-
-                return matched.stream().anyMatch(r -> {
-                    return r.department == null || r.department.equals(site.department);
-                });
-            }
-
-            return false;
         }
     }
 }

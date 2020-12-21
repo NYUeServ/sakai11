@@ -229,6 +229,7 @@ BrightspaceMigrator.prototype.showDialog = function() {
       self.currentPage = self.currentPage - 1;
       self.refreshData(function() {
         $('#nyuBrightspaceMigratorModal .modal-body')[0].scrollTop = 0;
+        $('#nyuBrightspaceMigratorModal .modal-body tbody td:first a').focus();
       });
     })
     .on('click', '.brightspace-migrator-next', function(event) {
@@ -236,6 +237,7 @@ BrightspaceMigrator.prototype.showDialog = function() {
       self.currentPage = self.currentPage + 1;
       self.refreshData(function() {
         $('#nyuBrightspaceMigratorModal .modal-body')[0].scrollTop = 0;
+        $('#nyuBrightspaceMigratorModal .modal-body tbody td:first a').focus();
       });
     });
   $('#nyuBrightspaceMigratorModal').modal();
