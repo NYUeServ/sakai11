@@ -16,6 +16,8 @@ BrightspaceMigrator.prototype.init = function() {
   this.$button.on('click', $.proxy(this.handleClick, this));
 
   $('#mastLogin .Mrphs-userNav__subnav .Mrphs-userNav__logout').before($menuItem);
+
+  this.currentPage = 0;
 }
 
 BrightspaceMigrator.prototype.handleClick = function() {
@@ -30,7 +32,7 @@ BrightspaceMigrator.prototype.handleClick = function() {
   self.showDialog();
 }
 
-BrightspaceMigrator.prototype.refreshData = function() {
+BrightspaceMigrator.prototype.refreshData = function(callback) {
   var self = this;
   if (self.on) {
     $.ajax({
@@ -39,6 +41,7 @@ BrightspaceMigrator.prototype.refreshData = function() {
       data: {
         'term': self.termFilter || '',
         'q': self.queryFilter || '',
+        'page': self.currentPage,
       },
       dataType: 'json',
       method: 'GET',
@@ -52,6 +55,7 @@ BrightspaceMigrator.prototype.refreshData = function() {
             $('#nyuBrightspaceMigratorModal tbody').append($('<tr><td colspan="3">Sorry, there are no sites available for export</td></tr>'));
           }
         } else {
+          var $targetTbody = $('#nyuBrightspaceMigratorModal tbody');
           self._data.sites.forEach(function(site) {
             var $tr = $('<tr>');
             $tr.data('site', site);
@@ -124,9 +128,18 @@ BrightspaceMigrator.prototype.refreshData = function() {
             } else {
               $tr.append($('<td>').html($('<button class="btn-primary nyu-trigger-brightspace-migration">Queue for Export</button>')));
             }
-            $('#nyuBrightspaceMigratorModal tbody').append($tr);
+            $targetTbody.append($tr);
           });
         }
+
+        if (self._data.has_previous_page || self._data.has_next_page) {
+          $('#nyuBrightspaceMigratorModal .brightspace-migrator-pagination').show();
+          $('#nyuBrightspaceMigratorModal .brightspace-migrator-previous').prop('disabled', !self._data.has_previous_page);
+          $('#nyuBrightspaceMigratorModal .brightspace-migrator-next').prop('disabled', !self._data.has_next_page);
+        } else {
+          $('#nyuBrightspaceMigratorModal .brightspace-migrator-pagination').hide();
+        }
+
         $('#nyuBrightspaceMigratorModal .brightspace-migrator-filter-term').empty();
         $('#nyuBrightspaceMigratorModal .brightspace-migrator-filter-term').append($('<option>'));
         self._data.terms.forEach(function(term) {
@@ -139,6 +152,7 @@ BrightspaceMigrator.prototype.refreshData = function() {
         $('#nyuBrightspaceMigratorModal .brightspace-migrator-filter-term').on('change', function() {
           if (self.termFilter !== $(this).val()) {
             self.termFilter = $(this).val();
+            self.currentPage = 0;
             self.refreshData();
           }
         });
@@ -153,6 +167,7 @@ BrightspaceMigrator.prototype.refreshData = function() {
           typingDelay = setTimeout(function() {
             if (self.queryFilter !== $input.val()) {
               self.queryFilter = $input.val();
+              self.currentPage = 0;
               self.refreshData();
             }
           }, 500);
@@ -165,17 +180,22 @@ BrightspaceMigrator.prototype.refreshData = function() {
         $('#nyuBrightspaceMigratorModal .brightspace-migrator-filter-clear').on('click', function() {
           self.queryFilter = '';
           self.termFilter = '';
+          self.currentPage = 0;
           self.refreshData();
         });
 
         $(window).off('resize', self.handleResize).on('resize', self.handleResize);
+
+        if (callback) {
+          callback();
+        }
       }
     });
   }
 }
 
 BrightspaceMigrator.prototype.handleResize = function() {
-  $('#nyuBrightspaceMigratorModal .modal-dialog .modal-body').height(Math.max(300, $(window).height() - 240));
+  $('#nyuBrightspaceMigratorModal .modal-dialog .modal-body').height(Math.max(300, $(window).height() - 250));
 }
 
 BrightspaceMigrator.prototype.showDialog = function() {
@@ -202,6 +222,22 @@ BrightspaceMigrator.prototype.showDialog = function() {
           site_id: siteData.site_id,
       }, function() {
           self.refreshData();
+      });
+    })
+    .on('click', '.brightspace-migrator-previous', function(event) {
+      event.preventDefault();
+      self.currentPage = self.currentPage - 1;
+      self.refreshData(function() {
+        $('#nyuBrightspaceMigratorModal .modal-body')[0].scrollTop = 0;
+        $('#nyuBrightspaceMigratorModal .modal-body tbody td:first a').focus();
+      });
+    })
+    .on('click', '.brightspace-migrator-next', function(event) {
+      event.preventDefault();
+      self.currentPage = self.currentPage + 1;
+      self.refreshData(function() {
+        $('#nyuBrightspaceMigratorModal .modal-body')[0].scrollTop = 0;
+        $('#nyuBrightspaceMigratorModal .modal-body tbody td:first a').focus();
       });
     });
   $('#nyuBrightspaceMigratorModal').modal();
