@@ -104,6 +104,7 @@ import net.oauth.SimpleOAuthValidator;
 import net.oauth.signature.OAuthSignatureMethod;
 
 import org.apache.commons.math3.util.Precision;
+import org.sakaiproject.component.cover.HotReloadConfigurationService;
 
 /**
  * Some Sakai Utility code for IMS Basic LTI
@@ -533,10 +534,22 @@ public class SakaiBLTIUtil {
 
 	public static void addPlacementInfo(Properties props, String placementId)
 	{
-
 		// Get the placement to see if we are to release information
 		ToolConfiguration placement = SiteService.findTool(placementId);
 		Properties config = placement.getConfig();
+
+		// NYU CLASSES-3977 rewrite lis_course_section_sourcedid for Course Reserves
+		if ("nyu.ares".equals(placement.getToolId())) {
+			String prop = "lis_course_section_sourcedid";
+			String value = (String) props.getProperty(prop);
+			String prefix = HotReloadConfigurationService.getString("nyu.course-reserves.lti-prefix", "");
+
+			if (value != null && !value.isEmpty() && !prefix.isEmpty()) {
+				props.setProperty(prop,
+						  String.format("%s:%s", prefix, value));
+			}
+		}
+
 
 		// Start setting the Basici LTI parameters
 		setProperty(props,BasicLTIConstants.RESOURCE_LINK_ID,placementId);
