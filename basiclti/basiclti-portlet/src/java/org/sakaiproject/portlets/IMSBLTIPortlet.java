@@ -230,19 +230,6 @@ public class IMSBLTIPortlet extends GenericPortlet {
 				session.setAttribute("sakai:maximized-url",iframeUrl);
 				log.debug("Setting sakai:maximized-url={}", iframeUrl);
 
-				try {
-					boolean isInstructor = SecurityService.unlock("site.upd", String.format("/site/%s", context));
-
-					if (isInstructor) {
-						text.append(loadInToolMessage(placement.getToolId(), "instructors"));
-					} else {
-						text.append(loadInToolMessage(placement.getToolId(), "students"));
-					}
-				} catch (Exception e) {
-					log.error(e.toString());
-					e.printStackTrace();
-				}
-
 				if ( "on".equals(newPage) || forcePopup ) {
 					String windowOpen = "window.open('"+iframeUrl+"','BasicLTI');"; 			
 					if ( popupDone == null ) {
@@ -316,55 +303,6 @@ public class IMSBLTIPortlet extends GenericPortlet {
 			log.debug("==== doView complete ====");
 		}
 
-	private static class InToolMessage {
-		public long lastRefreshTime;
-		public String content;
-
-		public InToolMessage(long lastRefreshTime, String content) {
-			this.lastRefreshTime = lastRefreshTime;
-			this.content = content;
-		}
-
-	}
-
-	ConcurrentHashMap<String, InToolMessage> inToolMessages = new ConcurrentHashMap<>();
-	ReentrantLock inToolRefreshLock = new ReentrantLock();
-
-
-	private String loadInToolMessage(String toolRegistration, String role) throws Exception {
-		String key = String.format("%s::%s", toolRegistration, role);
-
-		InToolMessage message = inToolMessages.get(key);
-		long refreshIntervalMs = 120000;
-
-		if (message == null || (System.currentTimeMillis() - message.lastRefreshTime) > refreshIntervalMs) {
-			// Do a refresh
-			inToolRefreshLock.lock();
-			try {
-				// Refresh still needed?
-				message = inToolMessages.get(key);
-				long now = System.currentTimeMillis();
-
-				if (message == null || (now - message.lastRefreshTime) > refreshIntervalMs) {
-					// Do it.
-					String messagePath = HotReloadConfigurationService.getString(String.format("%s.intoolmessagepath.%s", toolRegistration, role),
-												     null);
-
-					if (messagePath == null) {
-						message = new InToolMessage(now, "");
-					} else {
-						message = new InToolMessage(now, new String(Files.readAllBytes(Paths.get(messagePath))));
-					}
-
-					inToolMessages.put(key, message);
-				}
-			} finally {
-				inToolRefreshLock.unlock();
-			}
-		}
-
-		return message.content;
-	}
 
 	// Prepare the edit screen with data
 	public void prepareEdit(RenderRequest request)
