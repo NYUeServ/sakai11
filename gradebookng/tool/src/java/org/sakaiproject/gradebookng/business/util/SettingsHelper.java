@@ -26,6 +26,12 @@ public class SettingsHelper {
 				.collect(Collectors.toSet()).isEmpty();
 	}
 
+	public static boolean hasDuplicatePercentages(final List<GbGradingSchemaEntry> schemaList) {
+		final List<Double> percentages = schemaList.stream().map(GbGradingSchemaEntry::getMinPercent).collect(Collectors.toList());
+		return !percentages.stream().filter(i -> Collections.frequency(percentages, i) > 1)
+				.collect(Collectors.toSet()).isEmpty();
+	}
+
 	/**
 	 * Convert map into list of objects which is easier to work with in the views
 	 *

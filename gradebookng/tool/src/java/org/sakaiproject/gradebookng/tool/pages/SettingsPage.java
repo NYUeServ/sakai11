@@ -182,6 +182,9 @@ public class SettingsPage extends BasePage {
 				if (SettingsHelper.hasDuplicates(model.getGradingSchemaEntries())) {
 					error(getString("settingspage.gradingschema.duplicates.warning"));
 				}
+				if (SettingsHelper.hasDuplicatePercentages(model.getGradingSchemaEntries())) {
+					error(getString("settingspage.gradingschema.duplicatepercentages.warning"));
+				}
 
 			}
 
