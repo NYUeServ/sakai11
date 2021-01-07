@@ -13,5 +13,5 @@ public interface NYUGradesService
         throws SectionNotFoundException, MultipleSectionsMatchedException;
 
     public GradeSet getGradesForSection(String sectionEid)
-        throws SiteNotFoundForSectionException, MultipleSitesFoundForSectionException, GradePullDisabledException, AuditLogException;
+        throws SiteNotFoundForSectionException, MultipleSitesFoundForSectionException, GradePullDisabledException, AuditLogException, AmbiguousGradeMappingException;
 }

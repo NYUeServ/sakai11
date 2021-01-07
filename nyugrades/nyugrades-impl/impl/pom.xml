@@ -48,6 +48,13 @@
       <version>12.5</version>
       <scope>provided</scope>
     </dependency>
+    <dependency>
+      <groupId>org.sakaiproject.edu-services.gradebook</groupId>
+      <artifactId>gradebook-service-hibernate</artifactId>
+      <version>12.5</version>
+      <scope>provided</scope>
+    </dependency>
+
 
     <dependency>
       <groupId>org.sakaiproject.edu-services.course-management</groupId>
