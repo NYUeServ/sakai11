@@ -161,7 +161,8 @@ public class NYUGradesServiceImpl implements NYUGradesService
 
         Collection<Double> gradeMapPercentages = mapping.getGradeMap().values();
         if (new HashSet<>(gradeMapPercentages).size() != gradeMapPercentages.size()) {
-            throw new AmbiguousGradeMappingException(String.format("Site %s grade map is ambiguous", siteId));
+            LOG.warn(String.format("Site %s grade map is ambiguous", siteId));
+            throw new AmbiguousGradeMappingException("Not able to pull grades - multiple letter grades are mapping to the same percentage. Please adjust your grade scheme in your NYU Classes site’s Gradebook settings, then try again.");
         }
 
         // Reverting to our original method while we get the Gradebook service
