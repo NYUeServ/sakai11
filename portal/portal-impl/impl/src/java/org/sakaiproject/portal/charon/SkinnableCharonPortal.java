@@ -145,6 +145,12 @@ import lombok.extern.slf4j.Slf4j;
 
 import org.sakaiproject.component.cover.HotReloadConfigurationService;
 
+import java.util.concurrent.locks.ReentrantLock;
+import java.util.concurrent.ConcurrentHashMap;
+
+import java.nio.file.Files;
+import java.nio.file.Paths;
+
 /**
  * <p/> Charon is the Sakai Site based portal.
  * </p>
@@ -618,6 +624,62 @@ public class SkinnableCharonPortal extends HttpServlet implements Portal
 		}
 	}
 
+	private static class InToolMessage {
+		public long lastRefreshTime;
+		public String content;
+
+		public InToolMessage(long lastRefreshTime, String content) {
+			this.lastRefreshTime = lastRefreshTime;
+			this.content = content;
+		}
+
+	}
+
+	ConcurrentHashMap<String, InToolMessage> inToolMessages = new ConcurrentHashMap<>();
+	ReentrantLock inToolRefreshLock = new ReentrantLock();
+
+	private String loadInToolMessage(String toolRegistration, String role) throws Exception {
+		String key = String.format("%s::%s", toolRegistration, role);
+
+		InToolMessage message = inToolMessages.get(key);
+		long refreshIntervalMs = 120000;
+
+		if (message == null || (System.currentTimeMillis() - message.lastRefreshTime) > refreshIntervalMs) {
+			// Do a refresh
+			inToolRefreshLock.lock();
+			try {
+				// Refresh still needed?
+				message = inToolMessages.get(key);
+				long now = System.currentTimeMillis();
+
+				if (message == null || (now - message.lastRefreshTime) > refreshIntervalMs) {
+					// Do it.
+					String messagePath = HotReloadConfigurationService.getString(String.format("%s.intoolmessagepath.%s", toolRegistration, role),
+												     null);
+
+					if (messagePath == null) {
+						// Plural is optional for compat with the existing LTI thing...
+						messagePath = HotReloadConfigurationService.getString(String.format("%s.intoolmessagepath.%s", toolRegistration, role + "s"),
+												      null);
+					}
+
+					if (messagePath == null) {
+						message = new InToolMessage(now, "");
+					} else {
+						message = new InToolMessage(now, new String(Files.readAllBytes(Paths.get(messagePath))));
+					}
+
+					inToolMessages.put(key, message);
+				}
+			} finally {
+				inToolRefreshLock.unlock();
+			}
+		}
+
+		return message.content;
+	}
+
+
 	// This will be called twice in the buffered scenario since we need to set
 	// the session for neo tools with the sessio reset, helpurl and reseturl
 	@Override
@@ -754,14 +816,14 @@ public class SkinnableCharonPortal extends HttpServlet implements Portal
 		RenderResult result = ToolRenderService.render(this,placement, req, res,
 				getServletContext());
 
+		String userRole = "student";
+		if (site != null) {
+		    if (securityService.unlock(SiteService.SECURE_UPDATE_SITE, site.getReference())) {
+			userRole = "instructor";
+		    }
+		}
+
                 if (externalHelpSystem.isActive() && site != null) {
-			String userRole = "student";
-			if (securityService.unlock(SiteService.SECURE_UPDATE_SITE, site
-						   .getReference())) {
-				userRole = "instructor";
-			}
-
-
 			ExternalHelp help = externalHelpSystem.getHelp(placement.getToolId(), userRole);
 			ExternalHelp news = externalHelpSystem.getNews(placement.getToolId(), userRole);
 
@@ -769,6 +831,18 @@ public class SkinnableCharonPortal extends HttpServlet implements Portal
 			toolMap.put("externalHelp", help);
 			toolMap.put("externalNews", news);
                 }
+
+
+		toolMap.put("inToolMessage", "");
+
+		// If there's an in-tool message defined, show it
+		if (site != null) {
+			try {
+				toolMap.put("inToolMessage", loadInToolMessage(placement.getToolId(), userRole));
+			} catch (Exception e) {
+				log.warn("Failure loading in tool message: " + e);
+			}
+		}
 
 
 		if (result.getJSR168HelpUrl() != null)

@@ -4,6 +4,7 @@ import edu.nyu.classes.nyugrades.api.DBService;
 import edu.nyu.classes.nyugrades.api.Grade;
 import edu.nyu.classes.nyugrades.api.NYUGradesService;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -21,14 +22,10 @@ import org.sakaiproject.service.gradebook.shared.GradebookService;
 import org.sakaiproject.coursemanagement.api.CourseManagementService;
 import org.sakaiproject.coursemanagement.api.Membership;
 
-import edu.nyu.classes.nyugrades.api.Grade;
-import edu.nyu.classes.nyugrades.api.GradeSet;
-import edu.nyu.classes.nyugrades.api.AuditLogException;
-import edu.nyu.classes.nyugrades.api.SectionNotFoundException;
-import edu.nyu.classes.nyugrades.api.SiteNotFoundForSectionException;
-import edu.nyu.classes.nyugrades.api.MultipleSectionsMatchedException;
-import edu.nyu.classes.nyugrades.api.MultipleSitesFoundForSectionException;
-import edu.nyu.classes.nyugrades.api.GradePullDisabledException;
+import edu.nyu.classes.nyugrades.api.*;
+
+import org.sakaiproject.tool.gradebook.GradeMapping;
+import org.sakaiproject.tool.gradebook.Gradebook;
 
 
 public class NYUGradesServiceImpl implements NYUGradesService
@@ -151,12 +148,20 @@ public class NYUGradesServiceImpl implements NYUGradesService
 
 
     public GradeSet getGradesForSection(String sectionEid)
-        throws SiteNotFoundForSectionException, MultipleSitesFoundForSectionException, GradePullDisabledException, AuditLogException
+        throws SiteNotFoundForSectionException, MultipleSitesFoundForSectionException, GradePullDisabledException, AuditLogException, AmbiguousGradeMappingException
     {
         String siteId = getSiteId(sectionEid);
 
         if (!isSitePublished(siteId)) {
             throw new SiteNotFoundForSectionException(sectionEid);
+        }
+
+        Gradebook gb = (Gradebook) gradebookService.getGradebook(siteId);
+        GradeMapping mapping = gb.getSelectedGradeMapping();
+
+        Collection<Double> gradeMapPercentages = mapping.getGradeMap().values();
+        if (new HashSet<>(gradeMapPercentages).size() != gradeMapPercentages.size()) {
+            throw new AmbiguousGradeMappingException(String.format("Site %s grade map is ambiguous", siteId));
         }
 
         // Reverting to our original method while we get the Gradebook service

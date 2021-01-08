@@ -12,16 +12,8 @@
 
 package edu.nyu.classes.nyugrades.ws;
 
-import edu.nyu.classes.nyugrades.api.AuditLogException;
-import edu.nyu.classes.nyugrades.api.Grade;
-import edu.nyu.classes.nyugrades.api.GradePullDisabledException;
-import edu.nyu.classes.nyugrades.api.GradeSet;
-import edu.nyu.classes.nyugrades.api.MultipleSectionsMatchedException;
-import edu.nyu.classes.nyugrades.api.MultipleSitesFoundForSectionException;
-import edu.nyu.classes.nyugrades.api.NYUGradesService;
-import edu.nyu.classes.nyugrades.api.NYUGradesSessionService;
-import edu.nyu.classes.nyugrades.api.SectionNotFoundException;
-import edu.nyu.classes.nyugrades.api.SiteNotFoundForSectionException;
+import edu.nyu.classes.nyugrades.api.*;
+
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
@@ -382,7 +374,10 @@ public class NYUGradesWS extends HttpServlet
                 } catch (GradePullDisabledException e) {
                     throw new RequestFailedException(String.format("Grade pull is currently disabled for section: %s",
                             sectionEid));
+                } catch (AmbiguousGradeMappingException e) {
+                    throw new RequestFailedException(e.getMessage());
                 }
+
             } finally {
                 sakaiSession.invalidate();
             }

@@ -73,6 +73,7 @@ public class SettingsGradingSchemaPanel extends BasePanel implements IFormModelU
 	Label modifiedSchema;
 	Label unsavedSchema;
 	Label duplicateEntries;
+	Label duplicatePercentages;
 
 	GbCourseGradeChart chart;
 
@@ -224,6 +225,11 @@ public class SettingsGradingSchemaPanel extends BasePanel implements IFormModelU
 		this.duplicateEntries.setVisible(false);
 		this.duplicateEntries.setOutputMarkupPlaceholderTag(true);
 		settingsGradingSchemaPanel.add(this.duplicateEntries);
+
+		this.duplicatePercentages = new Label("duplicatePercentages", new ResourceModel("settingspage.gradingschema.duplicatepercentages.warning"));
+		this.duplicatePercentages.setVisible(false);
+		this.duplicatePercentages.setOutputMarkupPlaceholderTag(true);
+		settingsGradingSchemaPanel.add(this.duplicatePercentages);
 
 		// render the grading schema table
 		this.schemaWrap = new WebMarkupContainer("schemaWrap");
@@ -717,6 +723,8 @@ public class SettingsGradingSchemaPanel extends BasePanel implements IFormModelU
 		// add warning for duplicates
 		this.duplicateEntries.setVisible(SettingsHelper.hasDuplicates(schemaList));
 		target.add(this.duplicateEntries);
+		this.duplicatePercentages.setVisible(SettingsHelper.hasDuplicatePercentages(schemaList));
+		target.add(this.duplicatePercentages);
 
 		// refresh the chart
 		Map<String, Double> schemaMap = SettingsHelper.asMap(schemaList);
