@@ -472,17 +472,17 @@ public class SakaiProxyImpl implements SakaiProxy, Observer {
         Map<String, PronounceInfo> pronunceMap = new HashMap<>();
 
         if ("namecoach".equalsIgnoreCase(serverConfigurationService.getString("roster.pronunciation.provider", ""))) {
-            Map<String, String> eidToEmail = new HashMap<>();
+            List<String> emails = new ArrayList<>();
 
             for (User u : userMap.values()) {
-		eidToEmail.put(u.getEid(), u.getEmail());
+                emails.add(u.getEmail());
             }
 
-            if (eidToEmail.isEmpty()) return pronunceMap;
+            if (userMap.isEmpty()) return pronunceMap;
 
             try (CloseableHttpClient client = HttpClients.createDefault()) {
-                URIBuilder builder = new URIBuilder(serverConfigurationService.getString("namecoach.url", "https://name-coach.com/api/private/v4/participants"));
-                builder.setParameter("institution_id_list", String.join(",", eidToEmail.keySet())).setParameter("per_page", "999").setParameter("include", "embeddables,custom_attributes");
+                URIBuilder builder = new URIBuilder(serverConfigurationService.getString("namecoach.url", "https://nyu-uat.name-coach.com/api/private/v5/participants"));
+                builder.setParameter("institution_id_list", String.join(",", emails)).setParameter("per_page", "999").setParameter("include", "embeddables,custom_attributes");
 
                 HttpGet httpGet = new HttpGet(builder.build());
                 httpGet.setHeader("Authorization", serverConfigurationService.getString("namecoach.auth_token", ""));
@@ -506,23 +506,21 @@ public class SakaiProxyImpl implements SakaiProxy, Observer {
                         JsonNode pNode = iterator.next();
 
                         String pronouns = null;
-                        String pronounsPropName = HotReloadConfigurationService.getString("namecoach.custom_objects_property.pronouns", "pronoun");
-                        String pronounsOptOutPropName = HotReloadConfigurationService.getString("namecoach.custom_objects_property.opt_out", "opt_out");
-                        String pronounsOptOutYesValue = HotReloadConfigurationService.getString("namecoach.custom_objects_property.opt_out.yes_value", "Yes: Use my pronouns in the classroom");
-                        if (pNode.has("custom_objects") && pNode.get("custom_objects").hasNonNull(pronounsPropName)) {
-                            if (pNode.get("custom_objects").hasNonNull(pronounsOptOutPropName) && pronounsOptOutYesValue.equals(pNode.get("custom_objects").get(pronounsOptOutPropName).asText())) {
-                                pronouns = pNode.get("custom_objects").get(pronounsPropName).asText();
-                            }
+                        String pronounsPropName = HotReloadConfigurationService.getString("namecoach.custom_objects_property.pronouns", "custom_pronoun");
+                        String pronounsOptOutPropName = HotReloadConfigurationService.getString("namecoach.custom_objects_property.opt_out", "custom_pronoun_visible_for_lms");
+
+						if (pNode.hasNonNull(pronounsOptOutPropName) && pNode.get(pronounsOptOutPropName).asBoolean()) {
+							pronouns = pNode.get(pronounsPropName).asText();
+						}
+
+                        String recordingUrl = null;
+                        if (pNode.hasNonNull("recording_link")) {
+							recordingUrl = pNode.get("\"recording_link\"").asText();
                         }
 
-                        String embedCode = null;
-                        if (pNode.hasNonNull("embed_image")) {
-                            embedCode = pNode.get("embed_image").asText();
-                        }
-
-                        if (pNode.hasNonNull("institution_id")) {
-			    String email = eidToEmail.get(pNode.get("institution_id").asText());
-                            pronunceMap.put(email, new PronounceInfo(embedCode, pronouns));
+                        if (pNode.hasNonNull("email")) {
+                            String email = pNode.get("email").asText();
+                            pronunceMap.put(email, new PronounceInfo(recordingUrl, pronouns));
                         }
                     }
                 }

@@ -1,11 +1,11 @@
 package org.sakaiproject.roster.api;
 
 public class PronounceInfo {
-    public String embedCode;
+    public String recordingUrl;
     public String pronouns;
 
-    public PronounceInfo(String embedCode, String pronouns) {
-        this.embedCode = embedCode;
+    public PronounceInfo(String recordingUrl, String pronouns) {
+        this.recordingUrl = recordingUrl;
         this.pronouns = pronouns;
     }
 }

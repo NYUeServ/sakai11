@@ -22,8 +22,8 @@
         {{#if ../../viewProfile}}
             </a>
         {{/if}}
-        {{#if pronunciation.embedCode}}
-            <a href="javascript:void(0);" class="namePronunciation" onclick="this.querySelector('img[role=button]').click()" title="Listen to pronunciation of name">{{{pronunciation.embedCode}}}</a>
+        {{#if pronunciation.recordingUrl}}
+            <audio title="Listen to pronunciation of name" src="{{pronunciation.recordingUrl}}" controls />
         {{/if}}
         </div>
     {{/unless}}
