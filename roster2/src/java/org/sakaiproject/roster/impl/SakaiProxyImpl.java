@@ -502,23 +502,26 @@ public class SakaiProxyImpl implements SakaiProxy, Observer {
                     log.debug("JSON returned: {}", rootNode.toString());
                     JsonNode participantsNode = rootNode.path("participants");
                     Iterator<JsonNode> iterator  = participantsNode.iterator();
+
+                    String pronounsPropName = HotReloadConfigurationService.getString("namecoach.custom_objects_property.pronouns", "custom_pronoun");
+                    String pronounsOptOutPropName = HotReloadConfigurationService.getString("namecoach.custom_objects_property.opt_out", "custom_pronoun_visible_for_lms");
+                    String targetEventTitle = HotReloadConfigurationService.getString("namecoach.target_event_title", "NYU Name page test");
+
                     while (iterator.hasNext()) {
                         JsonNode pNode = iterator.next();
 
                         String pronouns = null;
-                        String pronounsPropName = HotReloadConfigurationService.getString("namecoach.custom_objects_property.pronouns", "custom_pronoun");
-                        String pronounsOptOutPropName = HotReloadConfigurationService.getString("namecoach.custom_objects_property.opt_out", "custom_pronoun_visible_for_lms");
 
-						if (pNode.hasNonNull(pronounsOptOutPropName) && pNode.get(pronounsOptOutPropName).asBoolean()) {
-							pronouns = pNode.get(pronounsPropName).asText();
-						}
+                        if (pNode.hasNonNull(pronounsOptOutPropName) && pNode.get(pronounsOptOutPropName).asBoolean()) {
+                            pronouns = pNode.get(pronounsPropName).asText();
+                        }
 
                         String recordingUrl = null;
                         if (pNode.hasNonNull("recording_link")) {
-							recordingUrl = pNode.get("\"recording_link\"").asText();
+                            recordingUrl = pNode.get("recording_link").asText();
                         }
 
-                        if (pNode.hasNonNull("email")) {
+                        if (targetEventTitle.equals(pNode.get("event_title").asText())) {
                             String email = pNode.get("email").asText();
                             pronunceMap.put(email, new PronounceInfo(recordingUrl, pronouns));
                         }
