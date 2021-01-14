@@ -473,7 +473,7 @@ public class SakaiProxyImpl implements SakaiProxy, Observer {
     private Map<String, PronounceInfo> getPronunciationMap(Map<String, User> userMap) {
         Map<String, PronounceInfo> pronunceMap = new HashMap<>();
 
-        if ("namecoach".equalsIgnoreCase(serverConfigurationService.getString("roster.pronunciation.provider", ""))) {
+        if ("namecoach".equalsIgnoreCase(HotReloadConfigurationService.getString("roster.pronunciation.provider", ""))) {
             List<String> emails = new ArrayList<>();
 
             for (User u : userMap.values()) {
@@ -483,7 +483,7 @@ public class SakaiProxyImpl implements SakaiProxy, Observer {
             if (userMap.isEmpty()) return pronunceMap;
 
             try (CloseableHttpClient client = HttpClients.createDefault()) {
-                URIBuilder builder = new URIBuilder(serverConfigurationService.getString("namecoach.url", "https://nyu-uat.name-coach.com/api/private/v5/participants/search"));
+                URIBuilder builder = new URIBuilder(HotReloadConfigurationService.getString("namecoach.url", "https://nyu-uat.name-coach.com/api/private/v5/participants/search"));
                 builder
                     .setParameter("per_page", "999")
                     .setParameter("include", "custom_attributes");
@@ -491,7 +491,7 @@ public class SakaiProxyImpl implements SakaiProxy, Observer {
 				String postBody = String.format("{\"email_list\": \"%s\"}", String.join(",", emails));
 
                 HttpPost httpPost = new HttpPost(builder.build());
-				httpPost.setHeader("Authorization", serverConfigurationService.getString("namecoach.auth_token", ""));
+				httpPost.setHeader("Authorization", HotReloadConfigurationService.getString("namecoach.auth_token", ""));
 				httpPost.setHeader("Accept", "application/json");
 				httpPost.setHeader("Content-Type", "application/json");
 				httpPost.setEntity(new StringEntity(postBody));
