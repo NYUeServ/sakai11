@@ -509,7 +509,9 @@ public class SakaiProxyImpl implements SakaiProxy, Observer {
                     JsonNode rootNode = objectMapper.readTree(body);
                     log.debug("JSON returned: {}", rootNode.toString());
                     JsonNode responseNode = rootNode.path("Response");
+					log.debug("Response node: {}", responseNode.toString());
                     JsonNode participantsNode = responseNode.path("participants");
+					log.debug("Participants node: {}", participantsNode.toString());
                     Iterator<JsonNode> iterator  = participantsNode.iterator();
 
                     String pronounsPropName = HotReloadConfigurationService.getString("namecoach.custom_objects_property.pronouns", "custom_pronoun");
@@ -518,6 +520,8 @@ public class SakaiProxyImpl implements SakaiProxy, Observer {
 
                     while (iterator.hasNext()) {
                         JsonNode pNode = iterator.next();
+
+                        log.debug("pNode: {}", pNode.toString());
 
                         String pronouns = null;
 
@@ -548,6 +552,9 @@ public class SakaiProxyImpl implements SakaiProxy, Observer {
                 log.error("URI Syntax Error", e);
             }
         }
+
+		log.debug("pronunceMap: {}", pronunceMap);
+
         return pronunceMap;
     }
 
