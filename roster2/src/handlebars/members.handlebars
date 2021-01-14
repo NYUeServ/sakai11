@@ -23,7 +23,10 @@
             </a>
         {{/if}}
         {{#if pronunciation.recordingUrl}}
-            <audio title="Listen to pronunciation of name" src="{{pronunciation.recordingUrl}}" controls />
+            <span class="roster-pronunciation-recording">
+              <button type="button" onclick="$(this).siblings('audio')[0].play(); return false;"><span class="fa fa-play"></span></button>
+              <audio title="Listen to pronunciation of name" src="{{pronunciation.recordingUrl}}" />
+            </span>
         {{/if}}
         </div>
     {{/unless}}
