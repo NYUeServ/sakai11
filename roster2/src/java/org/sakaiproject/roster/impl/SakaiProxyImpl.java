@@ -48,7 +48,9 @@ import org.apache.commons.collections4.MapUtils;
 import org.apache.http.client.ResponseHandler;
 import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpGet;
+import org.apache.http.client.methods.HttpPost;
 import org.apache.http.client.utils.URIBuilder;
+import org.apache.http.entity.StringEntity;
 import org.apache.http.impl.client.BasicResponseHandler;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClients;
@@ -482,18 +484,24 @@ public class SakaiProxyImpl implements SakaiProxy, Observer {
 
             try (CloseableHttpClient client = HttpClients.createDefault()) {
                 URIBuilder builder = new URIBuilder(serverConfigurationService.getString("namecoach.url", "https://nyu-uat.name-coach.com/api/private/v5/participants"));
-                builder.setParameter("institution_id_list", String.join(",", emails)).setParameter("per_page", "999").setParameter("include", "embeddables,custom_attributes");
+                builder
+                    .setParameter("per_page", "999")
+                    .setParameter("include", "custom_attributes");
 
-                HttpGet httpGet = new HttpGet(builder.build());
-                httpGet.setHeader("Authorization", serverConfigurationService.getString("namecoach.auth_token", ""));
-                httpGet.setHeader("Accept", "application/json");
-                httpGet.setHeader("Content-Type", "application/x-www-form-urlencoded");
-                log.debug("namecoach http get: " + httpGet.toString());
+				String postBody = String.format("{\"email_list\": \"%s\"}", String.join(",", emails));
+
+                HttpPost httpPost = new HttpPost(builder.build());
+				httpPost.setHeader("Authorization", serverConfigurationService.getString("namecoach.auth_token", ""));
+				httpPost.setHeader("Accept", "application/json");
+				httpPost.setHeader("Content-Type", "application/json");
+				httpPost.setEntity(new StringEntity(postBody));
+
+                log.debug("namecoach http post: " + httpPost.toString());
 
                 ResponseHandler<String> handler = new BasicResponseHandler();
                 ObjectMapper objectMapper = new ObjectMapper();
 
-                CloseableHttpResponse response = client.execute(httpGet);
+                CloseableHttpResponse response = client.execute(httpPost);
                 int statusCode = response.getStatusLine().getStatusCode();
 
                 if (statusCode == 200) {
@@ -526,6 +534,8 @@ public class SakaiProxyImpl implements SakaiProxy, Observer {
                             pronunceMap.put(email, new PronounceInfo(recordingUrl, pronouns));
                         }
                     }
+                } else {
+                    log.error(String.format("Namecoach request failed with status: %d error: %s", statusCode, handler.handleResponse(response)));
                 }
             }
             catch (UnsupportedEncodingException e) {
