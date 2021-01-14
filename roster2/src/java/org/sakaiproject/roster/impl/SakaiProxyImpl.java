@@ -483,7 +483,7 @@ public class SakaiProxyImpl implements SakaiProxy, Observer {
             if (userMap.isEmpty()) return pronunceMap;
 
             try (CloseableHttpClient client = HttpClients.createDefault()) {
-                URIBuilder builder = new URIBuilder(serverConfigurationService.getString("namecoach.url", "https://nyu-uat.name-coach.com/api/private/v5/participants"));
+                URIBuilder builder = new URIBuilder(serverConfigurationService.getString("namecoach.url", "https://nyu-uat.name-coach.com/api/private/v5/participants/search"));
                 builder
                     .setParameter("per_page", "999")
                     .setParameter("include", "custom_attributes");
@@ -508,7 +508,8 @@ public class SakaiProxyImpl implements SakaiProxy, Observer {
                     String body = handler.handleResponse(response);
                     JsonNode rootNode = objectMapper.readTree(body);
                     log.debug("JSON returned: {}", rootNode.toString());
-                    JsonNode participantsNode = rootNode.path("participants");
+                    JsonNode responseNode = rootNode.path("Response");
+                    JsonNode participantsNode = responseNode.path("participants");
                     Iterator<JsonNode> iterator  = participantsNode.iterator();
 
                     String pronounsPropName = HotReloadConfigurationService.getString("namecoach.custom_objects_property.pronouns", "custom_pronoun");
@@ -535,7 +536,7 @@ public class SakaiProxyImpl implements SakaiProxy, Observer {
                         }
                     }
                 } else {
-                    log.error(String.format("Namecoach request failed with status: %d error: %s", statusCode, handler.handleResponse(response)));
+                    log.error(String.format("Namecoach request failed with status: %d error: %s", statusCode, response.getEntity().toString()));
                 }
             }
             catch (UnsupportedEncodingException e) {
