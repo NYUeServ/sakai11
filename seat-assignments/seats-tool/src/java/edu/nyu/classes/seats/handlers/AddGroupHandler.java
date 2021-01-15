@@ -3,9 +3,8 @@ package edu.nyu.classes.seats.handlers;
 import edu.nyu.classes.seats.models.SeatSection;
 import edu.nyu.classes.seats.storage.Locks;
 import edu.nyu.classes.seats.storage.SeatsStorage;
+import edu.nyu.classes.seats.storage.LMSConnection;
 import edu.nyu.classes.seats.storage.db.DBConnection;
-import org.sakaiproject.site.api.Site;
-import org.sakaiproject.site.cover.SiteService;
 
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
@@ -13,6 +12,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+
 
 public class AddGroupHandler implements Handler {
 
@@ -23,15 +23,17 @@ public class AddGroupHandler implements Handler {
         DBConnection db = (DBConnection)context.get("db");
         String siteId = (String)context.get("siteId");
 
+        LMSConnection lms = (LMSConnection)context.get("lms");
+
         RequestParams p = new RequestParams(request);
         String sectionId = p.getString("sectionId", null);
-
-        Site site = SiteService.getSite(siteId);
 
         Locks.lockSiteForUpdate(siteId);
         try {
             SeatSection seatSection = SeatsStorage.getSeatSection(db, sectionId, siteId).get();
-            Integer maxGroups = SeatsStorage.getGroupMaxForSite(site);
+
+            Integer maxGroups = lms.getGroupMaxForSite(siteId);
+
             if (seatSection.listGroups().size() < maxGroups) {
                 for (int i = 0; ; i++) {
                     String groupName = String.format("%c", 65 + i);

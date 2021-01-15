@@ -1,14 +1,10 @@
 package edu.nyu.classes.seats.handlers;
 
-import edu.nyu.classes.seats.models.Meeting;
-import edu.nyu.classes.seats.models.SeatAssignment;
-import edu.nyu.classes.seats.models.SeatSection;
+import edu.nyu.classes.seats.models.*;
 import edu.nyu.classes.seats.storage.db.DBConnection;
 import edu.nyu.classes.seats.storage.Locks;
 import edu.nyu.classes.seats.storage.SeatsStorage;
-import org.json.simple.JSONObject;
-import org.sakaiproject.site.api.Site;
-import org.sakaiproject.site.cover.SiteService;
+import edu.nyu.classes.seats.storage.LMSConnection;
 
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
@@ -25,6 +21,8 @@ public class SplitSectionHandler implements Handler {
     public void handle(HttpServletRequest request, HttpServletResponse response, Map<String, Object> context) throws Exception {
         String siteId = (String)context.get("siteId");
         DBConnection db = (DBConnection)context.get("db");
+
+        LMSConnection lms = (LMSConnection)context.get("lms");
 
         RequestParams p = new RequestParams(request);
 
@@ -47,14 +45,14 @@ public class SplitSectionHandler implements Handler {
             throw new RuntimeException("Need argument: selectionType");
         }
 
-        Site site = SiteService.getSite(siteId);
-
         Locks.lockSiteForUpdate(siteId);
         try {
             SeatSection seatSection = SeatsStorage.getSeatSection(db, sectionId, siteId).get();
             if (seatSection.listGroups().size() <= 1) {
-                Integer maxGroups = SeatsStorage.getGroupMaxForSite(site);
-                SeatsStorage.bootstrapGroupsForSection(db, seatSection, Math.min(numberOfGroups, maxGroups), selectionType);
+
+                Integer maxGroups = lms.getGroupMaxForSite(siteId);
+                List<Member> sectionMembers = lms.getMembersForSection(db, seatSection);
+                SeatsStorage.bootstrapGroupsForSection(db, seatSection, sectionMembers, Math.min(numberOfGroups, maxGroups), selectionType);
                 SeatsStorage.markSectionAsSplit(db, seatSection);
             }
         } finally {

@@ -1,3 +1,5 @@
+// LTI note: This handler isn't available in LTI mode, so remains Sakai-specific.
+
 package edu.nyu.classes.seats.handlers;
 
 import edu.nyu.classes.seats.models.Meeting;

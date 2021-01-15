@@ -1,6 +1,6 @@
 package edu.nyu.classes.seats;
 
-import edu.nyu.classes.seats.Emails;
+import edu.nyu.classes.seats.SakaiEmails;
 import edu.nyu.classes.seats.api.SeatsService;
 import edu.nyu.classes.seats.models.*;
 import edu.nyu.classes.seats.storage.*;
@@ -18,8 +18,8 @@ import org.sakaiproject.user.cover.UserDirectoryService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class SeatGroupUpdatesTask {
-    private static final Logger LOG = LoggerFactory.getLogger(SeatGroupUpdatesTask.class);
+public class SakaiSeatGroupUpdatesTask {
+    private static final Logger LOG = LoggerFactory.getLogger(SakaiSeatGroupUpdatesTask.class);
 
     private static long WINDOW_MS = 30000;
     private static Map<String, Long> recentProcessed = new LinkedHashMap<>();
@@ -147,7 +147,7 @@ public class SeatGroupUpdatesTask {
             return;
         }
 
-        Emails.sendUserAddedEmail(studentUser.get(0), group, site);
+        SakaiEmails.sendUserAddedEmail(studentUser.get(0), group, site);
     }
 
     private static boolean processSite(String siteId) {
@@ -188,7 +188,7 @@ public class SeatGroupUpdatesTask {
                                 String rosterId = section.getProviderGroupId();
                                 String sponsorStemName = SeatsStorage.getSponsorSectionId(db, rosterId);
 
-                                if (!SeatsStorage.stemIsEligible(db, sponsorStemName)) {
+                                if (!SakaiSeatsStorage.stemIsEligible(db, sponsorStemName)) {
                                     continue;
                                 }
 
@@ -202,7 +202,7 @@ public class SeatGroupUpdatesTask {
 
                             for (SeatSection section : SeatsStorage.siteSeatSections(db, siteId)) {
                                 if (section.provisioned) {
-                                    SeatsStorage.SyncResult syncResult = SeatsStorage.syncGroupsToSection(db, section, site);
+                                    SeatsStorage.SyncResult syncResult = SakaiSeatsStorage.syncGroupsToSection(db, section, site);
 
                                     if (section.listGroups().size() > 1) {
                                         for (Map.Entry<String, List<Member>> entry : syncResult.adds.entrySet()) {
@@ -231,7 +231,8 @@ public class SeatGroupUpdatesTask {
                                         }
                                     }
                                 } else {
-                                    SeatsStorage.bootstrapGroupsForSection(db, section, 1, SeatsStorage.SelectionType.RANDOM);
+                                    List<Member> sectionMembers = new SakaiSeatsStorage().getMembersForSection(db, section);
+                                    SeatsStorage.bootstrapGroupsForSection(db, section, sectionMembers, 1, SeatsStorage.SelectionType.RANDOM);
                                 }
                             }
 
@@ -276,6 +277,7 @@ public class SeatGroupUpdatesTask {
                            "  sec.id as section_id," +
                            "  to_char(ssp.value) as override_to_blended" +
                            " from SEAT_GROUP_SECTION sec" +
+                           " inner join sakai_site ss on ss.site_id = sec.site_id" +
                            " inner join NYU_T_COURSE_CATALOG cc on sec.primary_stem_name = cc.stem_name AND cc.instruction_mode not in ('OB', 'P')" +
                            " left join sakai_site_property ssp on ssp.site_id = sec.site_id AND ssp.name = 'OverrideToBlended'")
                         .executeQuery()
@@ -307,6 +309,7 @@ public class SeatGroupUpdatesTask {
                     // Find any cohorts that linked to a detached roster
                     db.run("select sec.primary_stem_name, sec.site_id, sec.id as section_id" +
                             " from SEAT_GROUP_SECTION sec" +
+                           " inner join sakai_site ss on ss.site_id = sec.site_id" +
                             " left join SAKAI_REALM sr on sr.realm_id = concat('/site/', sec.site_id)" +
                             " left join SAKAI_REALM_PROVIDER srp on srp.realm_key = sr.realm_key and srp.provider_id = replace(sec.primary_stem_name, ':', '_')" +
                             " where srp.provider_id is null")

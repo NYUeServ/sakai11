@@ -147,6 +147,20 @@ public class DBResults implements Iterable<ResultSet>, Iterator<ResultSet>, Auto
         }
     }
 
+    public Optional<Long> oneLong() throws SQLException {
+        try {
+            Optional<Long> result = Optional.empty();
+
+            if (this.hasNext()) {
+                result = Optional.ofNullable(this.resultSet.getLong(1));
+            }
+
+            return result;
+        } finally {
+            this.close();
+        }
+    }
+
     public Optional<String> oneString() throws SQLException {
         try {
             Optional<String> result = Optional.empty();

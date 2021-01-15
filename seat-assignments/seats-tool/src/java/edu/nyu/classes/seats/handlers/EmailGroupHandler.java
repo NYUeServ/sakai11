@@ -1,25 +1,19 @@
 package edu.nyu.classes.seats.handlers;
 
-import edu.nyu.classes.seats.Emails;
 import edu.nyu.classes.seats.models.Meeting;
 import edu.nyu.classes.seats.models.Member;
 import edu.nyu.classes.seats.models.SeatGroup;
 import edu.nyu.classes.seats.models.SeatSection;
 import edu.nyu.classes.seats.storage.Locks;
 import edu.nyu.classes.seats.storage.SeatsStorage;
+import edu.nyu.classes.seats.storage.LMSConnection;
 import edu.nyu.classes.seats.storage.db.DBConnection;
-import org.sakaiproject.site.api.Site;
 import org.sakaiproject.site.cover.SiteService;
 
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import java.util.*;
 import java.util.stream.Collectors;
-
-import org.sakaiproject.email.cover.EmailService;
-import org.sakaiproject.user.cover.UserDirectoryService;
-import org.sakaiproject.user.api.User;
-
 
 public class EmailGroupHandler implements Handler {
 
@@ -51,13 +45,22 @@ public class EmailGroupHandler implements Handler {
             return;
         }
 
-        List<String> netids = group.get().listMembers().stream().map((m) -> m.netid).collect(Collectors.toList());
-        List<User> users = UserDirectoryService.getUsersByEids(netids);
+        List<String> studentNetids = group.get().listMembers().stream().map((m) -> m.netid).collect(Collectors.toList());
 
-        Emails.sendPlaintextEmail(users,
-                                  SiteService.getSite(siteId),
-                                  subject,
-                                  body);
+        LMSConnection lms = (LMSConnection)context.get("lms");
+
+        // CC Instructors, Teaching Assistants and Course Site Admins
+        List<Member> members = lms.getMembersForSite(db, siteId);
+
+        List<String> ccNetIds = members
+            .stream()
+            .filter(m -> m.isManager())
+            .map(m -> m.netid)
+            .collect(Collectors.toList());
+
+
+        lms.sendPlaintextEmail(new ArrayList<>(0), ccNetIds, studentNetids,
+                               subject, body);
 
         response.getWriter().write("{}");
     }
