@@ -1,3 +1,13 @@
+{{#if standaloneMode}}
+    <div style="text-align: right"><a href="https://www.nyu.edu/servicelink/KB0018303" target="_blank">Help</a></div>
+{{/if}}
+
+{{#if iframe_mode}}
+    <br />
+{{else}}
+    {{{subpage this "standalone_header"}}}
+{{/if}}
+
 <div class="vue-enabled">
     {{#if rosterFiddlerEnabled}}
         <a href="{{baseURL}}/roster-fiddler">☃</a>

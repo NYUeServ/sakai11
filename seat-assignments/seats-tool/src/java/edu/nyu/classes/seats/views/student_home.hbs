@@ -1,3 +1,11 @@
+{{#if standaloneMode}}
+    <div style="text-align: right"><a href="https://www.nyu.edu/servicelink/KB0018304" target="_blank">Help</a></div>
+{{/if}}
+
+{{#unless iframe_mode}}
+    {{{subpage this "standalone_header"}}}
+{{/unless}}
+
 <div class="vue-enabled seats-student">
     <student-home baseurl={{baseURL}}></student-home>
 </div>

@@ -1,3 +1,5 @@
+// LTI note: This isn't used in the LTI version, so remains Sakai-specific.
+
 package edu.nyu.classes.seats.handlers;
 
 import edu.nyu.classes.seats.models.Meeting;

@@ -12,7 +12,7 @@ import org.sakaiproject.email.api.EmailAddress;
 import org.sakaiproject.email.api.EmailMessage;
 import org.sakaiproject.site.api.Site;
 
-public class Emails {
+public class SakaiEmails {
 
     private static Set<String> ROLES_TO_CC = new HashSet<>(Arrays.asList(new String[] { "Instructor", "Teaching Assistant", "Course Site Admin" }));
 
@@ -63,22 +63,26 @@ public class Emails {
         EmailService.getInstance().send(msg);
     }
 
-    public static void sendPlaintextEmail(List<org.sakaiproject.user.api.User> recipients,
-                                          Site site,
+    public static void sendPlaintextEmail(List<EmailAddress> toAddresses,
+                                          List<EmailAddress> ccAddresses,
+                                          List<EmailAddress> bccAddresses,
                                           String subject,
-                                          String plaintextBody) throws Exception {
+                                          String body) {
         EmailMessage msg = new EmailMessage();
         // Overriden by the email service anyway...
         msg.setFrom(DEFAULT_FROM);
         msg.setSubject(subject);
 
-        msg.setBody(plaintextBody);
+        msg.setBody(body);
 
-        msg.setRecipients(RecipientType.BCC, recipients.stream().map((u) -> new EmailAddress(u.getEmail())).collect(Collectors.toList()));
-        msg.setRecipients(RecipientType.CC, buildCCList(site));
+        msg.setRecipients(RecipientType.TO, toAddresses);
+        msg.setRecipients(RecipientType.BCC, bccAddresses);
+        msg.setRecipients(RecipientType.CC, toAddresses);
 
-        EmailService.getInstance().send(msg);
-
+        try {
+            EmailService.getInstance().send(msg);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
     }
-
 }

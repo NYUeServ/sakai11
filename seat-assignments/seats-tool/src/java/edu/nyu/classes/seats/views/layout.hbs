@@ -3,13 +3,25 @@
     <head>
         <meta charset="utf-8" />
 
-        <script src="/library/webjars/jquery/1.12.4/jquery.min.js"></script>
-        <script src="/library/webjars/jquery-ui/1.12.1/jquery-ui.min.js"></script>
+
+        <script src="/seats-tool/js/jquery/1.12.4/jquery.min.js"></script>
+        <script src="/seats-tool/js/jquery-ui/1.12.1/jquery-ui.min.js"></script>
+
+
+        {{#if standaloneMode}}
+            <script type="text/javascript" src="/seats-tool/bootstrap/3.3.7/js/bootstrap.min.js"></script>
+            <link rel="stylesheet" type="text/css" href="/seats-tool/bootstrap/3.3.7/css/bootstrap.min.css"></link>
+
+            <link rel="stylesheet" type="text/css" href="/seats-tool/css/standalone.css?t={{portalCdnQuery}}" />
+        {{else}}
+            <link rel="stylesheet" type="text/css" href="/library/skin/tool_base.css?t={{portalCdnQuery}}" />
+
+            {{{randomSakaiHeadStuff}}}
+        {{/if}}
 
         <script src="/seats-tool/js/jquery.growl.js?t={{portalCdnQuery}}" type="text/javascript"></script>
         <link href="/seats-tool/css/jquery.growl.css?t={{portalCdnQuery}}" rel="stylesheet" type="text/css" />
 
-        <link rel="stylesheet" type="text/css" href="/library/skin/tool_base.css?t={{portalCdnQuery}}" />
         <link rel="stylesheet" type="text/css" href="/seats-tool/css/base.css?t={{portalCdnQuery}}" />
         <link rel="stylesheet" type="text/css" media="print" href="/seats-tool/css/print.css?t={{portalCdnQuery}}" />
 
@@ -21,9 +33,14 @@
 
         <script src="/seats-tool/js/components.js?t={{portalCdnQuery}}"></script>
 
-        {{{randomSakaiHeadStuff}}}
+        {{#if standaloneMode}}
+            <script>
+                Vue.prototype.SeatToolMode = 'standalone';
+            </script>
+        {{/if}}
     </head>
-    <body>
+
+    <body {{#if standaloneMode}} style="padding-top: 20px"{{/if}}>
         <div class="portletBody seats-body">
             {{{subpage this "body"}}}
         </div>

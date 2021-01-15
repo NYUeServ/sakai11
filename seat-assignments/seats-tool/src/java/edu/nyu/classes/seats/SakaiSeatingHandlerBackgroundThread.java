@@ -11,11 +11,11 @@ import org.sakaiproject.site.api.Site;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class SeatingHandlerBackgroundThread extends Thread {
-    private static final Logger LOG = LoggerFactory.getLogger(SeatingHandlerBackgroundThread.class);
+public class SakaiSeatingHandlerBackgroundThread extends Thread {
+    private static final Logger LOG = LoggerFactory.getLogger(SakaiSeatingHandlerBackgroundThread.class);
     private AtomicBoolean running = new AtomicBoolean(false);
 
-    public SeatingHandlerBackgroundThread startThread() {
+    public SakaiSeatingHandlerBackgroundThread startThread() {
         this.running = new AtomicBoolean(true);
         this.setDaemon(true);
         this.start();
@@ -46,14 +46,14 @@ public class SeatingHandlerBackgroundThread extends Thread {
         while (this.running.get()) {
             try {
                 if (loopCount % 60 == 0) {
-                    lastMtimeCheck = SeatGroupUpdatesTask.runMTimeChecks(lastMtimeCheck);
+                    lastMtimeCheck = SakaiSeatGroupUpdatesTask.runMTimeChecks(lastMtimeCheck);
                 }
 
                 if (loopCount % 600 == 0) {
-                    SeatGroupUpdatesTask.findChangedInstructionModes();
+                    SakaiSeatGroupUpdatesTask.findChangedInstructionModes();
                 }
 
-                findProcessedSince = SeatGroupUpdatesTask.handleSeatGroupUpdates(findProcessedSince);
+                findProcessedSince = SakaiSeatGroupUpdatesTask.handleSeatGroupUpdates(findProcessedSince);
 
                 // To be enabled at a future date.
                 if (loopCount % 30 == 0) {
@@ -75,7 +75,7 @@ public class SeatingHandlerBackgroundThread extends Thread {
     }
 
     public static void setDBTimingThresholdMs(long ms) {
-        SeatGroupUpdatesTask.setDBTimingThresholdMs(ms);
+        SakaiSeatGroupUpdatesTask.setDBTimingThresholdMs(ms);
         SakaiGroupSyncTask.setDBTimingThresholdMs(ms);
     }
 }
