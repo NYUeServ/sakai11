@@ -22,11 +22,19 @@
         {{#if ../../viewProfile}}
             </a>
         {{/if}}
-        {{#if pronunciation.recordingUrl}}
-            <span class="roster-pronunciation-recording">
-              <button type="button" onclick="$(this).siblings('audio')[0].play(); return false;"><span class="fa fa-play"></span></button>
-              <audio title="Listen to pronunciation of name" src="{{pronunciation.recordingUrl}}" />
-            </span>
+        {{#if pronunciation.embedCode}}
+            <a href="javascript:void(0);" class="namePronunciation" onclick="this.querySelector('img[role=button]').click()" title="Listen to pronunciation of name">
+                {{{pronunciation.embedCode}}}
+            </a>
+        {{else}}
+            {{#if pronunciation.recordingUrl}}
+                <span class="roster-pronunciation-recording">
+                    <button type="button" onclick="$(this).siblings('audio')[0].play(); return false;">
+                        <span class="fa fa-play"></span>
+                    </button>
+                    <audio title="Listen to pronunciation of name" src="{{pronunciation.recordingUrl}}"></audio>
+                </span>
+            {{/if}}
         {{/if}}
         </div>
     {{/unless}}

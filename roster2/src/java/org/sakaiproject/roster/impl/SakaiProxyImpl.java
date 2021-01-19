@@ -486,7 +486,7 @@ public class SakaiProxyImpl implements SakaiProxy, Observer {
                 URIBuilder builder = new URIBuilder(HotReloadConfigurationService.getString("namecoach.url", "https://nyu-uat.name-coach.com/api/private/v5/participants/search"));
                 builder
                     .setParameter("per_page", "999")
-                    .setParameter("include", "custom_attributes");
+                    .setParameter("include", "custom_attributes,embeddables");
 
 				String postBody = String.format("{\"email_list\": \"%s\"}", String.join(",", emails));
 
@@ -534,9 +534,14 @@ public class SakaiProxyImpl implements SakaiProxy, Observer {
                             recordingUrl = pNode.get("recording_link").asText();
                         }
 
+                        String embedCode = null;
+                        if (pNode.hasNonNull("embed_image")) {
+                            embedCode = pNode.get("embed_image").asText();
+                        }
+
                         if (targetEventTitle.equals(pNode.get("event_title").asText())) {
                             String email = pNode.get("email").asText();
-                            pronunceMap.put(email, new PronounceInfo(recordingUrl, pronouns));
+                            pronunceMap.put(email, new PronounceInfo(recordingUrl, pronouns, embedCode));
                         }
                     }
                 } else {
