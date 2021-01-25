@@ -6,8 +6,6 @@ import edu.nyu.classes.seats.storage.SeatsStorage;
 import edu.nyu.classes.seats.storage.db.DBConnection;
 import org.json.simple.JSONArray;
 import org.json.simple.JSONObject;
-import org.sakaiproject.site.api.Site;
-import org.sakaiproject.site.cover.SiteService;
 
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;

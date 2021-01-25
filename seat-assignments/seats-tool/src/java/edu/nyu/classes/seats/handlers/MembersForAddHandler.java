@@ -1,3 +1,5 @@
+// LTI note: This isn't used in the LTI version, so remains Sakai-specific.
+
 package edu.nyu.classes.seats.handlers;
 
 import edu.nyu.classes.seats.models.Meeting;
@@ -5,6 +7,7 @@ import edu.nyu.classes.seats.models.SeatAssignment;
 import edu.nyu.classes.seats.models.SeatSection;
 import edu.nyu.classes.seats.storage.db.DBConnection;
 import edu.nyu.classes.seats.storage.Locks;
+import edu.nyu.classes.seats.storage.SakaiSeatsStorage;
 import edu.nyu.classes.seats.storage.SeatsStorage;
 import org.json.simple.JSONObject;
 
@@ -72,7 +75,7 @@ public class MembersForAddHandler implements Handler {
                 })
             .collect(Collectors.toList());
 
-        Map<String, SeatsStorage.UserDisplayName> memberNames = SeatsStorage.getMemberNames(candidateMembers.stream().map(m -> m.getUserEid()).collect(Collectors.toList()));
+        Map<String, SeatsStorage.UserDisplayName> memberNames = SakaiSeatsStorage.getMemberNames(candidateMembers.stream().map(m -> m.getUserEid()).collect(Collectors.toList()));
 
         JSONArray result = new JSONArray();
 

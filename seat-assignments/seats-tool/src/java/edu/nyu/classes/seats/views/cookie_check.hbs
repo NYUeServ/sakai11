@@ -1,0 +1,67 @@
+<!doctype html>
+<html>
+    <head>
+        <title>Launching Seating Tool</title>
+        <meta charset="utf-8" />
+    </head>
+    <body>
+        <div id="no-cookies-message" style="margin-top: 50px; display: none">
+            <p><a target="_blank" class="btn btn-lg btn-primary" id="launch-btn" href="{{lti_redirect_url}}">Launch the Seating Tool</a></p>
+
+            <p id="please-click">Your browser is blocking third-party cookies.  Although we applaud your dedication to privacy, you will need to open this tool in a new window.  Please click the button above to continue.</p>
+
+            <div id="thanks-for-clicking" style="display: none;">
+                <h2>Seating Tool Launched!</h2>
+
+                <p>The Seating Tool is loading in a separate window.</p>
+            </div>
+        </div>
+
+        <script>
+         let miserableFailure = true;
+         let targetURL = '{{{lti_redirect_url}}}';
+
+         function appraiseTheSituation() {
+             if (miserableFailure) {
+                 document.getElementById('no-cookies-message').style.display = 'block';
+             } else {
+                 window.location.href = targetURL.replace("seats_running_standalone", "seats_running_iframe");
+             }
+         }
+
+         fetch("{{baseURL}}cookie-check?mode=set", {
+             method: 'GET',
+             credentials: 'include'
+         }).then((response) => response.json())
+           .then((json) => {
+               if (json.cookie_set) {
+                   fetch("{{baseURL}}cookie-check?mode=check", {
+                       method: 'GET',
+                       credentials: 'include'
+                   }).then((response) => response.json())
+                     .then((json) => {
+                         if (json.cookie_found) {
+                             miserableFailure = false;
+                         }
+                         appraiseTheSituation();
+                     }).catch((err) => {
+                         appraiseTheSituation();
+                     });
+               }
+           }).catch((err) => {
+               appraiseTheSituation();
+           });
+
+         document.getElementById('launch-btn').addEventListener('click', function () {
+             setTimeout(() => {
+                 this.innerText = "Seating Tool Launched!";
+                 this.style.display = 'none';
+
+                 document.getElementById('please-click').style.display = 'none';
+                 document.getElementById('thanks-for-clicking').style.display = 'block';
+             }, 1000);
+         });
+
+        </script>
+    </body>
+</html>

@@ -7,8 +7,6 @@ import edu.nyu.classes.seats.models.SeatSection;
 import edu.nyu.classes.seats.storage.Locks;
 import edu.nyu.classes.seats.storage.SeatsStorage;
 import edu.nyu.classes.seats.storage.db.DBConnection;
-import org.sakaiproject.site.api.Site;
-import org.sakaiproject.site.cover.SiteService;
 
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;

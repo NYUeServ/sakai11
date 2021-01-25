@@ -1,3 +1,5 @@
+Vue.prototype.SeatToolMode = 'sakai'
+
 SeatToolEventBus = new Vue();
 
 StudentLocationLabels = {
@@ -639,7 +641,7 @@ Vue.component('group-meeting-summary', {
 Vue.component('group-meeting-entry', {
   template: `
 <tr :class="entryCSSClass" :title="disabled ? disabledMessage : ''">
-  <td>
+  <td v-if="SeatToolMode === 'sakai'">
     <div class="profile-pic">
       <img :src="'/direct/profile/' + assignment.netid + '/image/official?siteId=' + section.siteId"/>
     </div>
@@ -783,7 +785,7 @@ Vue.component('group-meeting', {
   <table class="seat-table seat-assignment-listing">
     <thead>
       <tr>
-        <th scope="col">Picture</th>
+        <th v-if="SeatToolMode === 'sakai'" scope="col">Picture</th>
         <th scope="col">Name (NetID)</th>
         <th scope="col">Seat<br/>Assignment</th>
         <th scope="col">Student Location</th>
@@ -1137,8 +1139,8 @@ Vue.component('section-group', {
     >
     </group-meeting>
   </template>
-  <button @click="addAdhocMembers()">Add additional site member(s)</button>
-  <contextual-help 
+  <button v-if="SeatToolMode === 'sakai'" @click="addAdhocMembers()">Add additional site member(s)</button>
+  <contextual-help
     feature="Add additional site member(s)"
     helpText="Additional site members are students, instructors, TAs, or course site administrators within the course site who are not part of the official student roster(s) from Albert. This includes individuals manually added to the course site in the Settings tool.">
   </contextual-help>

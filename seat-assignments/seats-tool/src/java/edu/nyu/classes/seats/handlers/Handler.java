@@ -1,7 +1,5 @@
 package edu.nyu.classes.seats.handlers;
 
-import org.sakaiproject.authz.cover.SecurityService;
-
 import java.util.List;
 import java.util.Map;
 import javax.servlet.http.HttpServletRequest;
@@ -49,5 +47,9 @@ public interface Handler {
 
     default boolean isSiteUpdRequired() {
         return true;
+    }
+
+    default boolean isLTISetupHandler() {
+        return false;
     }
 }
