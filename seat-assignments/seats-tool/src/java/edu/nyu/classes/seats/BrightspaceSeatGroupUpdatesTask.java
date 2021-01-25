@@ -182,6 +182,16 @@ public class BrightspaceSeatGroupUpdatesTask {
                             BrightspaceSectionInfo sectionInfo = brightspace.getSectionInfo(db, siteId);
                             BrightspaceClient.CourseOfferingData courseData = brightspace.fetchCourseData(siteId);
 
+                            // THINKME: Delete sections from seat_group_section that claim to be linked to
+                            // siteId but aren't in the data according to Brightspace.
+                            //
+                            // Need to handle crosslisted rosters sensibly for this so we don't accidentally
+                            // delete them.
+                            //
+                            // For now, if rosters are removed from a Brightspace site they'll stick around
+                            // here.
+                            //
+
                             // Sync the rosters
                             for (BrightspaceSection brightspaceSection : sectionInfo.getSections()) {
                                 String rosterId = brightspaceSection.getRosterId();
