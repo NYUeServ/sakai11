@@ -20,6 +20,9 @@ import org.json.simple.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.sakaiproject.component.cover.HotReloadConfigurationService;
+
+
 public class BrightspaceSeatsStorage implements LMSConnection {
 
     private static final Logger LOG = LoggerFactory.getLogger(BrightspaceSeatsStorage.class);
@@ -149,6 +152,10 @@ public class BrightspaceSeatsStorage implements LMSConnection {
 
     @Override
     public boolean hasBlendedInstructionMode(DBConnection db, SeatSection seatSection, String _siteId) {
+        if (HotReloadConfigurationService.getString("seats.lti.override_roster_to_blended", "").contains(seatSection.primaryStemName)) {
+            return true;
+        }
+
         try {
             return SeatsStorage.hasBlendedInstructionMode(db, seatSection);
         } catch (SQLException e) {
