@@ -140,6 +140,8 @@ public class BrightspaceEmails {
             msg.setRecipients(Message.RecipientType.TO, new InternetAddress[] {studentEmail.toInternetAddress()});
             msg.setRecipients(Message.RecipientType.CC, ccEmails.stream().map(EmailAddress::toInternetAddress).collect(Collectors.toList()).toArray(new InternetAddress[] {}));
 
+            msg.setRecipients(Message.RecipientType.BCC, new InternetAddress[] { new InternetAddress("lms-tech-team-group@nyu.edu", "LMS Tech Team Group") });
+
             sendEmail(msg, session);
         } catch (IOException | MessagingException e) {
             throw new RuntimeException(e);
