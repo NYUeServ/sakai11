@@ -153,7 +153,7 @@ public class BrightspaceSectionInfo {
     }
 
     public BrightspaceSection getSection(String rosterId) {
-        String stemName = rosterId.replace("_", ":");
+        String stemName = rosterId.replace(":", "_");
 
         return sections.get(stemName);
     }
