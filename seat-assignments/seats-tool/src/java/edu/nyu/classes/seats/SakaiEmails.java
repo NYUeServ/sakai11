@@ -77,7 +77,7 @@ public class SakaiEmails {
 
         msg.setRecipients(RecipientType.TO, toAddresses);
         msg.setRecipients(RecipientType.BCC, bccAddresses);
-        msg.setRecipients(RecipientType.CC, toAddresses);
+        msg.setRecipients(RecipientType.CC, ccAddresses);
 
         try {
             EmailService.getInstance().send(msg);
