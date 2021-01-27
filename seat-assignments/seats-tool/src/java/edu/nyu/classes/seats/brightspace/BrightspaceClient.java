@@ -117,7 +117,7 @@ public class BrightspaceClient {
                     userPages.add(userData);
 
                     if (userData.path("PagingInfo > HasMoreItems").asBoolean(false)) {
-                        bookmark = userData.path("PagingInfo > BookMark").asStringOrDie();
+                        bookmark = userData.path("PagingInfo > Bookmark").asStringOrDie();
                     } else {
                         break;
                     }
@@ -171,12 +171,13 @@ public class BrightspaceClient {
 
         public JSON json(JSON dflt) {
             try {
-                successOrDie();
-
-                if (response.getStatusLine().getStatusCode() == 404) {
+                if (response != null && response.getStatusLine() != null && response.getStatusLine().getStatusCode() == 404) {
                     // Brightspace returns 404 for "nothing here"
                     return dflt;
                 }
+
+                successOrDie();
+
                 return JSON.parse(bodyString());
             } catch (IOException e) {
                 throw new RuntimeException(e);
@@ -266,7 +267,7 @@ public class BrightspaceClient {
 
                         String accessToken = this.tokens.accessToken();
 
-                        req.addHeader("Authorization", String.format("Bearer %s", accessToken));
+                        req.setHeader("Authorization", String.format("Bearer %s", accessToken));
 
                         CloseableHttpResponse response = client.execute(req);
 
