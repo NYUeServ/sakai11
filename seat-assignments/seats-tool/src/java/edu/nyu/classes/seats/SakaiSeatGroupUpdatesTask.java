@@ -296,7 +296,7 @@ public class SakaiSeatGroupUpdatesTask {
                                                     if (performDelete) {
                                                         SeatsStorage.deleteSection(db, section);
                                                     } else {
-                                                        LOG.error("Delete skipped due to seat.auto-delete=false");
+                                                        LOG.error("Delete skipped due to seats.auto-delete=false");
                                                     }
                                                 } catch (SQLException e) {
                                                     LOG.error("Failure during delete: " + e);

@@ -86,6 +86,11 @@ public class BrightspaceSeatsStorage implements LMSConnection {
         Set<Member> result = new HashSet<>();
 
         for (String rosterId : rosterIds) {
+            if (sectionInfo.getSection(rosterId) == null) {
+                LOG.error(String.format("Roster in DB not found in Brightspace data (%s)", rosterId));
+                throw new RuntimeException("getMembersForSectionFromInfo found a data inconsistency");
+            }
+
             result.addAll(sectionInfo.getSection(rosterId).getMembers());
         }
 
