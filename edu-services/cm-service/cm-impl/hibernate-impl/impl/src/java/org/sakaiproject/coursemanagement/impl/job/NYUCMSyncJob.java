@@ -90,9 +90,9 @@ public class NYUCMSyncJob extends CmSynchronizer implements Job {
 			if(log.isInfoEnabled()) log.info("NYU sync job: logging out ...");
 			logoutFromSakai();
 
-			// Do something!
 			SeatsService seats = (SeatsService) ComponentManager.get("edu.nyu.classes.seats.SeatsService");
-			seats.markSectionsForSync(this.nyuUpdatedSectionEids);
+			seats.markSectionsForSync(this.nyuUpdatedSectionEids.values());
+			this.nyuUpdatedSectionEids.clear();
 
 			if(log.isInfoEnabled()) log.info("NYU sync job: done!");
 		} finally {

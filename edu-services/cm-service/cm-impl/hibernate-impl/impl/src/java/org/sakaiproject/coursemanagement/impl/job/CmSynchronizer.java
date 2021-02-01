@@ -20,6 +20,8 @@
  **********************************************************************************/
 package org.sakaiproject.coursemanagement.impl.job;
 
+import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.text.ParseException;
@@ -54,6 +56,12 @@ import org.sakaiproject.coursemanagement.api.Meeting;
 import org.sakaiproject.coursemanagement.api.Membership;
 import org.sakaiproject.coursemanagement.api.Section;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardOpenOption;
+import java.util.Arrays;
+
 /**
  * Synchronizes the state of the local CourseManagementService with an external
  * data source.
@@ -68,7 +76,8 @@ public abstract class CmSynchronizer {
 	
 	protected abstract InputStream getXmlInputStream();
 
-	protected List<String> nyuUpdatedSectionEids = new ArrayList<>();
+	protected UpdatedSectionTracking nyuUpdatedSectionEids = new UpdatedSectionTracking(new File(System.getProperty("user.home"), ".cm_sync_updated_eids_adds.dat"),
+											    new File(System.getProperty("user.home"), ".cm_sync_updated_eids_drops.dat"));
 
 	public synchronized void syncAllCmObjects() {
 		long start = System.currentTimeMillis();
@@ -526,6 +535,9 @@ public abstract class CmSynchronizer {
 
 		boolean didSomething = false;
 
+		// Mark this section pre-emptively in case this job gets interrupted.
+		this.nyuUpdatedSectionEids.add(section.getEid());
+
 		// Keep track of the new members userEids, and add/update them
 		Set newMembers = new HashSet();
 		List memberElements = membersElement.getChildren("member");
@@ -553,8 +565,8 @@ public abstract class CmSynchronizer {
                         }
 		}
 
-		if (didSomething) {
-		    this.nyuUpdatedSectionEids.add(section.getEid());
+		if (!didSomething) {
+		    this.nyuUpdatedSectionEids.drop(section.getEid());
 		}
 	}
 
@@ -671,4 +683,82 @@ public abstract class CmSynchronizer {
 	public void setCmService(CourseManagementService cmService) {
 		this.cmService = cmService;
 	}
+
+
+	// Track the section EIDs that have been updated so far.  Uses a pair of files
+	// (`adds` and `drops`) to record set members, and final set membership is
+	// calculated by adds - drops.
+	protected class UpdatedSectionTracking {
+		private Path addsPath;
+		private Path dropsPath;
+
+		private HashSet<String> adds;
+		private HashSet<String> drops;
+
+		public UpdatedSectionTracking(File addsFile, File dropsFile) {
+			this.addsPath = addsFile.toPath();
+			this.dropsPath = dropsFile.toPath();
+
+			this.adds = new HashSet<>();
+			this.drops = new HashSet<>();
+
+			try {
+				if (addsFile.exists()) {
+					this.adds.addAll(Files.readAllLines(addsPath));
+				}
+
+				if (dropsFile.exists()) {
+					this.drops.addAll(Files.readAllLines(dropsPath));
+				}
+			} catch (IOException e) {
+				throw new RuntimeException(e);
+			}
+		}
+
+		public synchronized void add(String sectionEid) {
+			if (!adds.contains(sectionEid)) {
+				adds.add(sectionEid);
+				drops.remove(sectionEid);
+
+				try {
+					Files.write(addsPath, Arrays.asList(sectionEid), StandardOpenOption.CREATE, StandardOpenOption.APPEND);
+				} catch (IOException e) {
+					throw new RuntimeException(e);
+				}
+			}
+		}
+
+		public synchronized void drop(String sectionEid) {
+			if (!drops.contains(sectionEid)) {
+				drops.add(sectionEid);
+				adds.remove(sectionEid);
+
+				try {
+					Files.write(dropsPath, Arrays.asList(sectionEid), StandardOpenOption.CREATE, StandardOpenOption.APPEND);
+				} catch (IOException e) {
+					throw new RuntimeException(e);
+				}
+			}
+		}
+
+		public List<String> values() {
+			Set<String> result = new HashSet<>(adds);
+			result.removeAll(drops);
+
+			return new ArrayList<>(result);
+		}
+
+		public synchronized void clear() {
+			adds.clear();
+			drops.clear();
+
+			try {
+				Files.write(addsPath, new byte[] {});
+				Files.write(dropsPath, new byte[] {});
+			} catch (IOException e) {
+				throw new RuntimeException(e);
+			}
+		}
+	}
+
 }
