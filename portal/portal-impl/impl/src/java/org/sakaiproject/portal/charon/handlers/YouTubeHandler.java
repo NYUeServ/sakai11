@@ -11,6 +11,7 @@ import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.sakaiproject.component.cover.HotReloadConfigurationService;
 import org.sakaiproject.portal.api.PortalHandlerException;
 import org.sakaiproject.tool.api.Session;
 
@@ -42,7 +43,8 @@ public class YouTubeHandler extends BasePortalHandler
 				return END;
 			}
 
-			String oembedURL = "http://www.youtube.com/oembed?format=json&scheme=https&iframe=1&maxwidth=480&maxheight=360&url=";
+			String oembedURL = HotReloadConfigurationService.getString("youtube.oembed.url", "https://www.youtube.com/oembed?format=json&scheme=https&iframe=1&maxwidth=480&maxheight=360&url=");
+
 			try {
 				movie = URLEncoder.encode(movie, "UTF-8");
 			}
