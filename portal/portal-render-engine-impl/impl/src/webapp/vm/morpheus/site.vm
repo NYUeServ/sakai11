@@ -309,7 +309,7 @@
                           </td>
                         </tr>
                       </thead>
-                      <tbody><tr><td colspan="3">Loading your sites...</td></tr></tbody>
+                      <tbody><tr><td colspan="3" class="brightspace-migrator-loading-indicator"><div class="brightspace-migrator-loader"></div> Loading your sites...</td></tr></tbody>
                     </table>
                     <div class="brightspace-migrator-pagination" style="text-align: center;">
                       <button class="brightspace-migrator-previous" style="width: 80px;">Previous</button>
