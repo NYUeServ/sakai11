@@ -525,7 +525,7 @@ public class SakaiProxyImpl implements SakaiProxy, Observer {
 
                         String pronouns = null;
 
-                        if (pNode.hasNonNull(pronounsOptOutPropName) && pNode.get(pronounsOptOutPropName).asBoolean()) {
+                        if (pNode.hasNonNull(pronounsOptOutPropName) && pNode.get(pronounsOptOutPropName).asBoolean() && pNode.hasNonNull(pronounsPropName)) {
                             pronouns = pNode.get(pronounsPropName).asText();
                         }
 
