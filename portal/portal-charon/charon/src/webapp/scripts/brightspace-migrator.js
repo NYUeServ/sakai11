@@ -116,11 +116,11 @@ BrightspaceMigrator.prototype.refreshData = function(callback) {
               $tr.append($lastTd);
               $state.css('display', 'block');
 
-              if (site.brightspace_org_unit_id > 0) {
-                if (json.can_remigrate) {
-                  $lastTd.append($('<a class="button pull-right nyu-trigger-brightspace-migration-redo">Redo migration</a>'));
-                }
+              if (json.can_remigrate) {
+                $lastTd.append($('<a class="button pull-right nyu-trigger-brightspace-migration-redo">Restart migration</a>'));
+              }
 
+              if (site.brightspace_org_unit_id > 0) {
                 $lastTd.append(
                   $('<a>')
                     .attr('href', 'https://brightspace.nyu.edu/d2l/home/'+site.brightspace_org_unit_id)
