@@ -173,6 +173,12 @@ public class BrightspaceMigratorHandler extends BasePortalHandler {
                 replacements.add(termFilter);
             }
 
+            String userFilter = "ma.netid = ?";
+
+            if (SecurityService.isSuperUser()) {
+                userFilter = "(ma.netid = ? OR 1 = 1)";
+            }
+
             String querySubSelect = "select site_id from NYU_T_SELFSERV_SITES";
             if (queryFilter != null && queryFilter.length() >= 3) {
                 querySubSelect = "select sss.site_id" +
@@ -180,7 +186,7 @@ public class BrightspaceMigratorHandler extends BasePortalHandler {
                     " inner join NYU_T_SELFSERV_SITES sss on sss.site_id = ma.site_id" +
                     " left join NYU_T_SELFSERV_INSTRS ssi on ssi.site_id = sss.site_id" +
                     " left join NYU_T_SELFSERV_ROSTERS ssr on ssr.site_id = sss.site_id" +
-                    " where ma.netid = ?" +
+                    " where " + userFilter +
                     " and (ssi.netid = ? or ssr.roster_id = ? or instr(lower(sss.title), lower(?)) >= 1)";
 
                 replacements.add(netid);
@@ -193,14 +199,27 @@ public class BrightspaceMigratorHandler extends BasePortalHandler {
             try {
                 db = getConnection();
 
-                try (PreparedStatement ps = db.prepareStatement("select sss.*" +
-                                                                " from NYU_T_SELFSERV_MIG_ACCESS ma" +
-                                                                " inner join NYU_T_SELFSERV_SITES sss on sss.site_id = ma.site_id" +
-                                                                " where ma.netid = ?" +
-                                                                termFilterSQL +
-                                                                " and sss.site_id in (" + querySubSelect + ")" +
-                                                                " order by sss.term_sort desc, sss.site_id asc" +
-                                                                String.format(" limit %d offset %d", page_size + 1, page_size * page))) {
+                String pageQuery = "select sss.*" +
+                    " from NYU_T_SELFSERV_MIG_ACCESS ma" +
+                    " inner join NYU_T_SELFSERV_SITES sss on sss.site_id = ma.site_id" +
+                    " where " + userFilter +
+                    termFilterSQL +
+                    " and sss.site_id in (" + querySubSelect + ")" +
+                    " order by sss.term_sort desc, sss.site_id asc" +
+                    String.format(" limit %d offset %d", page_size + 1, page_size * page);
+
+                // Admin gets all sites with no restriction
+                if (SecurityService.isSuperUser()) {
+                    pageQuery = "select sss.*" +
+                        " from NYU_T_SELFSERV_SITES sss" +
+                        " where (? = 'bogus' OR 1 = 1)" +
+                        termFilterSQL +
+                        " and sss.site_id in (" + querySubSelect + ")" +
+                        " order by sss.term_sort desc, sss.site_id asc" +
+                        String.format(" limit %d offset %d", page_size + 1, page_size * page);
+                }
+
+                try (PreparedStatement ps = db.prepareStatement(pageQuery)) {
                     for (int i=0; i<replacements.size(); i++) {
                         ps.setString(i+1, replacements.get(i));
                     }
@@ -501,6 +520,8 @@ public class BrightspaceMigratorHandler extends BasePortalHandler {
                 obj.put("has_previous_page", sitesPage.hasPreviousPage);
                 obj.put("has_next_page", sitesPage.hasNextPage);
 
+                obj.put("can_remigrate", SecurityService.isSuperUser());
+
                 for (SiteToArchive site : sitesPage.sites) {
                     JSONObject siteJSON = new JSONObject();
                     siteJSON.put("site_id", site.siteId);
@@ -574,7 +595,7 @@ public class BrightspaceMigratorHandler extends BasePortalHandler {
 
                 String siteId = StringUtils.trimToNull(req.getParameter("site_id"));
                 if (siteId != null && SecurityService.unlock("site.upd", "/site/" + siteId)) {
-                    queueSiteForArchive(siteId);
+                    queueSiteForArchive(siteId, SecurityService.isSuperUser());
                 }
 
                 res.setHeader("Content-type", "text/json");
@@ -591,6 +612,10 @@ public class BrightspaceMigratorHandler extends BasePortalHandler {
 
 
     public boolean isAllowedToMigrateSitesToBrightspace() {
+        if (SecurityService.isSuperUser()) {
+            return true;
+        }
+
         if (!"true".equals(HotReloadConfigurationService.getString("brightspace.selfservice.enabled", "true"))) {
             // Self-service is disabled!
             return false;
@@ -701,12 +726,22 @@ public class BrightspaceMigratorHandler extends BasePortalHandler {
     }
 
 
-    private void queueSiteForArchive(String siteId) {
+    private void queueSiteForArchive(String siteId, boolean rearchiveAllowed) {
         String netid = UserDirectoryService.getCurrentUser().getEid();
 
         Connection db = null;
+        boolean autoCommit = true;
         try {
             db = sqlService.borrowConnection();
+            autoCommit = db.getAutoCommit();
+            db.setAutoCommit(false);
+
+            if (rearchiveAllowed) {
+                try (PreparedStatement ps = db.prepareStatement("delete from NYU_T_SITE_ARCHIVES_QUEUE where site_id = ?")) {
+                    ps.setString(1, siteId);
+                    ps.executeUpdate();
+                }
+            }
 
             try (PreparedStatement ps = db.prepareStatement("insert into NYU_T_SITE_ARCHIVES_QUEUE (site_id, queued_at, queued_by)" +
                     " values (?, ?, ?)")) {
@@ -714,12 +749,17 @@ public class BrightspaceMigratorHandler extends BasePortalHandler {
                 ps.setLong(2, System.currentTimeMillis());
                 ps.setString(3, netid);
                 ps.executeUpdate();
-                db.commit();
             }
+
+            db.commit();
         } catch (SQLException e) {
             M_log.error(this + ".queueSiteForArchive: " + e);
         } finally {
             if (db != null) {
+                try {
+                    db.setAutoCommit(autoCommit);
+                } catch (SQLException e) {}
+
                 sqlService.returnConnection(db);
             }
         }
