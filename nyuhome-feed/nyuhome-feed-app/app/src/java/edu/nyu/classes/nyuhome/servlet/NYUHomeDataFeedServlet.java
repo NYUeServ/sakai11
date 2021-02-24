@@ -142,7 +142,7 @@ public class NYUHomeDataFeedServlet extends HttpServlet {
             response.getOutputStream().write(msg.getBytes("UTF-8"));
 
         } catch (AccessDeniedException ex) {
-            LOG.error("Access denied", ex);
+            // LOG.error("Access denied", ex);
             response.setContentType("text/plain");
             response.setStatus(403);
             String msg = "Access denied";

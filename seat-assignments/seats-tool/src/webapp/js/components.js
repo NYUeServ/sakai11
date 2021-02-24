@@ -1504,7 +1504,8 @@ Vue.component('instructor-table', {
               </template>
           </template>
           <template v-else-if="fetched">
-            <p>This tool is yet to be provisioned. Please try again in a moment.</p>
+            <p v-if="isSakai">This tool is yet to be provisioned. Please try again in a moment.</p>
+            <p v-else>This site is not eligible to record seating assignments. The Seating Assignments tool is available for in-person or blended course sections only. If you believe that you are seeing this message in error, contact the IT Service Desk at <a href="mailto:askit@nyu.edu">askit@nyu.edu</a>.</p>
           </template>
       </div>
 
@@ -1540,6 +1541,11 @@ Vue.component('instructor-table', {
       handleSectionSelect: function(sectionId) {
         this.selectedSectionId = sectionId;
       },
+  },
+  computed: {
+    isSakai: function() {
+      return Vue.prototype.SeatToolMode === 'sakai';
+    },
   },
   mounted: function() {
       this.fetchData();

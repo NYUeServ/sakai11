@@ -20,6 +20,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.stream.Collectors;
+import java.sql.SQLException;
 
 public class BrightspaceSeatGroupUpdatesTask {
     private static final Logger LOG = LoggerFactory.getLogger(BrightspaceSeatGroupUpdatesTask.class);
@@ -175,6 +176,9 @@ public class BrightspaceSeatGroupUpdatesTask {
             try {
                 LOG.info("Process: " + siteId);
 
+                boolean performDelete = "true".equals(HotReloadConfigurationService.getString("seats.lti.auto-delete", "false"));
+
+
                 DB.transaction
                     ("Bootstrap groups for a site and section",
                      (DBConnection db) -> {
@@ -182,15 +186,36 @@ public class BrightspaceSeatGroupUpdatesTask {
                             BrightspaceSectionInfo sectionInfo = brightspace.getSectionInfo(db, siteId);
                             BrightspaceClient.CourseOfferingData courseData = brightspace.fetchCourseData(siteId);
 
-                            // THINKME: Delete sections from seat_group_section that claim to be linked to
-                            // siteId but aren't in the data according to Brightspace.
-                            //
-                            // Need to handle crosslisted rosters sensibly for this so we don't accidentally
-                            // delete them.
-                            //
-                            // For now, if rosters are removed from a Brightspace site they'll stick around
-                            // here.
-                            //
+                            // Find any cohorts that linked to a detached roster
+                            db.run("select sec.primary_stem_name, sec.site_id, sec.id as section_id" +
+                                   " from SEAT_GROUP_SECTION sec" +
+                                   " where sec.site_id = ?")
+                                .param(siteId)
+                                .executeQuery()
+                                .each((row) -> {
+                                        if (sectionInfo.getSection(row.getString("primary_stem_name")) == null) {
+                                            // This section doesn't appear in Brightspace anymore
+
+                                            LOG.info(String.format("Removing Seats section for detached roster '%s' in site '%s'",
+                                                                   row.getString("primary_stem_name"),
+                                                                   row.getString("site_id")));
+
+                                            SeatsStorage.getSeatSection(db, row.getString("section_id"), row.getString("site_id"))
+                                                .ifPresent((section) -> {
+                                                        try {
+                                                            if (performDelete) {
+                                                                SeatsStorage.deleteSection(db, section);
+                                                            } else {
+                                                                LOG.error("Delete skipped due to seats.lti.auto-delete=false");
+                                                            }
+                                                        } catch (SQLException e) {
+                                                            LOG.error("Failure during delete: " + e);
+                                                            e.printStackTrace();
+                                                        }
+                                                    });
+                                        }
+                                    });
+
 
                             // Sync the rosters
                             for (BrightspaceSection brightspaceSection : sectionInfo.getSections()) {

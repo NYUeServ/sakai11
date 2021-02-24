@@ -11,15 +11,31 @@ public class LTISession {
     private static final ThreadLocal<Map<String, Object>> activeSessionStorage = new ThreadLocal<>();
     private static final ThreadLocal<Boolean> activeSessionChanged = new ThreadLocal<>();
 
+    private static final String SESSION_MTIME = "__session_mtime";
+
     public static String setCurrentSession(String sessionIdOrNull) {
         String sessionId = sessionIdOrNull;
 
+        Map<String, Object> session = null;
+
+        if (sessionId != null) {
+            // Session should exist in the DB already
+            session = loadSession(sessionId);
+
+            if (!session.containsKey(SESSION_MTIME)) {
+                // No dice.  Have a new one.
+                sessionId = null;
+                session = null;
+            }
+        }
+
         if (sessionId == null) {
             sessionId = UUID.randomUUID().toString();
+            session = loadSession(sessionId);
         }
 
         activeSession.set(sessionId);
-        activeSessionStorage.set(loadSession(sessionId));
+        activeSessionStorage.set(session);
         activeSessionChanged.set(false);
 
         return sessionId;
@@ -66,7 +82,7 @@ public class LTISession {
                     .each((row) -> {
                             result.put(row.getString("key"),
                                        mapValueToType(row.getString("value"), row.getString("type")));
-                            result.put("__session_mtime", row.getLong("mtime"));
+                            result.put(SESSION_MTIME, row.getLong("mtime"));
                         });
 
                 return null;
@@ -84,7 +100,7 @@ public class LTISession {
 
         long now = System.currentTimeMillis();
 
-        return now - (Long)storage.getOrDefault("__session_mtime", now);
+        return now - (Long)storage.getOrDefault(SESSION_MTIME, now);
     }
 
 
@@ -154,7 +170,7 @@ public class LTISession {
                     long now = System.currentTimeMillis();
 
                     for (Map.Entry<String, Object> e : storage.entrySet()) {
-                        if ("__session_mtime".equals(e.getKey())) {
+                        if (SESSION_MTIME.equals(e.getKey())) {
                             continue;
                         }
 

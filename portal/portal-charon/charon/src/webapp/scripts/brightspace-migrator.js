@@ -116,6 +116,10 @@ BrightspaceMigrator.prototype.refreshData = function(callback) {
               $tr.append($lastTd);
               $state.css('display', 'block');
 
+              if (json.can_remigrate) {
+                $lastTd.append($('<a class="button pull-right nyu-trigger-brightspace-migration-redo">Restart migration</a>'));
+              }
+
               if (site.brightspace_org_unit_id > 0) {
                 $lastTd.append(
                   $('<a>')
@@ -210,7 +214,7 @@ BrightspaceMigrator.prototype.showDialog = function() {
       self.handleResize();
       self.refreshData();
     })
-    .on('click', '.nyu-trigger-brightspace-migration', function(event) {
+    .on('click', '.nyu-trigger-brightspace-migration,.nyu-trigger-brightspace-migration-redo', function(event) {
       event.preventDefault();
 
       $(event.target).prop('disabled', true);
