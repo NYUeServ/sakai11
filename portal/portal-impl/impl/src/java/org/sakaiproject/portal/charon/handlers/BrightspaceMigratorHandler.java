@@ -53,9 +53,9 @@ public class BrightspaceMigratorHandler extends BasePortalHandler {
             } catch (Exception e) {
                 M_log.error("FAILURE LOADING MIGRATOR DATABASE: " + e);
                 e.printStackTrace();
-            }
 
-            this.refreshThread = startRefreshThread();
+                throw new RuntimeException(e);
+            }
 
             HikariDataSource ds = new HikariDataSource();
             ds.setDriverClassName("org.sqlite.JDBC");
@@ -63,6 +63,8 @@ public class BrightspaceMigratorHandler extends BasePortalHandler {
             ds.setMaxLifetime(30000);
 
             this.dataSource = ds;
+
+            this.refreshThread = startRefreshThread();
         }
 
         public void close() {
