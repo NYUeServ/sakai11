@@ -340,5 +340,6 @@
           </script>
         #end
 
+        <script src="$!{portalCDNPath}/portal/scripts/nyu-course-site-setup.js$!{portalCDNQuery}"></script>
     </body>
 </html>
