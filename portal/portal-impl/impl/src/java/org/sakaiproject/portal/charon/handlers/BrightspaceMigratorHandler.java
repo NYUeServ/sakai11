@@ -28,8 +28,9 @@ import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 
 import com.zaxxer.hikari.HikariDataSource;
+import com.zaxxer.hikari.HikariPoolMXBean;
 import java.util.stream.Collectors;
-import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.atomic.*;
 
 public class BrightspaceMigratorHandler extends BasePortalHandler {
 
@@ -42,7 +43,18 @@ public class BrightspaceMigratorHandler extends BasePortalHandler {
         private String workingDBPath;
         private HikariDataSource dataSource;
 
-        Thread refreshThread;
+
+        // True if we currently have a refresh thread running
+        AtomicBoolean refreshInProgress = new AtomicBoolean(false);
+
+        // The time we last looked to see if a new DB version was available
+        AtomicLong lastRefreshCheckTime = new AtomicLong(0);
+
+        // The time our refresh last failed to finish (e.g. due to an IO error of some
+        // kind).  Used to avoid getting stuck in a loop of constantly copying and
+        // failing.
+        AtomicLong lastRefreshFailureTime = new AtomicLong(0);
+
 
         public MigratorDatabase() {
             this.masterDBPath = HotReloadConfigurationService.getString("brightspace.selfservice.masterdb", "/shared/sakai/self_service.db");
@@ -53,10 +65,14 @@ public class BrightspaceMigratorHandler extends BasePortalHandler {
             } catch (Exception e) {
                 M_log.error("FAILURE LOADING MIGRATOR DATABASE: " + e);
                 e.printStackTrace();
+
+                throw new RuntimeException(e);
             }
 
-            this.refreshThread = startRefreshThread();
+            openWorkingDatabase();
+        }
 
+        private void openWorkingDatabase() {
             HikariDataSource ds = new HikariDataSource();
             ds.setDriverClassName("org.sqlite.JDBC");
             ds.setJdbcUrl("jdbc:sqlite:" + workingDBPath);
@@ -108,53 +124,82 @@ public class BrightspaceMigratorHandler extends BasePortalHandler {
             return false;
         }
 
-        private Thread startRefreshThread() {
+        public void maybeRefreshDB() {
+            if (refreshInProgress.get()) {
+                return;
+            }
+
+            long now = System.currentTimeMillis();
+
+            if ((now - lastRefreshCheckTime.get()) < 60000) {
+                return;
+            }
+
+            if ((now - lastRefreshFailureTime.get()) < 3600000) {
+                // If we failed in the last hour, don't retry
+                return;
+            }
+
+            if (refreshInProgress.compareAndSet(false, true)) {
+                startRefreshThread();
+            }
+        }
+
+        private void startRefreshThread() {
             Thread refresh = new Thread(() -> {
                     Thread.currentThread().setName("BrightspaceMigratorHandler::startRefreshThread");
                     M_log.info("BrightspaceMigratorHandler::startRefreshThread starting up");
-                    while (!Thread.interrupted()) {
-                        try {
-                            if (needsRefresh()) {
-                                M_log.info("Refreshing self service database from new copy");
-                                MigratorDatabase oldInstance = MigratorDatabase.instance.getAndSet(new MigratorDatabase());
+                    try {
+                        lastRefreshCheckTime.set(System.currentTimeMillis());
 
-                                M_log.info("Old thread shutting down");
+                        if (needsRefresh()) {
+                            copyLatest();
+                        } else {
+                            return;
+                        }
+
+                        // reopen the datasource, closing the other
+                        HikariDataSource oldDataSource = this.dataSource;
+
+                        this.openWorkingDatabase();
+
+                        M_log.info("BrightspaceMigratorHandler::startRefreshThread new database installed");
+
+                        if (oldDataSource == null) {
+                            M_log.info("BrightspaceMigratorHandler::startRefreshThread no previous pool to shut down");
+                            return;
+                        }
+
+                        try {
+                            HikariPoolMXBean poolBean = oldDataSource.getHikariPoolMXBean();
+                            int retry = 0;
+                            while (poolBean.getActiveConnections() > 0 && retry < 10) {
+                                retry++;
+                                poolBean.softEvictConnections();
 
                                 try {
-                                    Thread.sleep(60000);
+                                    Thread.sleep(1000);
                                 } catch (InterruptedException e) {
-                                    Thread.currentThread().interrupt();
-                                    break;
                                 }
-
-                                oldInstance.close();
-                                Thread.currentThread().interrupt();
-                                break;
                             }
 
-                            try {
-                                Thread.sleep(60000);
-                            } catch (InterruptedException e) {
-                                Thread.currentThread().interrupt();
-                                break;
-                            }
-                        } catch (Throwable t) {
-                            M_log.error("BrightspaceMigratorHandler::startRefreshThread caught (and ignored) unhandled error: " + t);
-                            t.printStackTrace();
-                            try {
-                                Thread.sleep(1000);
-                            } catch (InterruptedException e) {
-                                Thread.currentThread().interrupt();
-                                break;
-                            }
+                            oldDataSource.close();
+                            M_log.info("BrightspaceMigratorHandler::startRefreshThread closed old pool");
+                        } catch (Exception e) {
+                            M_log.error("Failure while closing old data source", e);
                         }
+                    } catch (Throwable t) {
+                        lastRefreshFailureTime.set(System.currentTimeMillis());
+
+                        M_log.error("BrightspaceMigratorHandler::startRefreshThread caught error: " + t);
+                        t.printStackTrace();
+                    } finally {
+                        refreshInProgress.set(false);
                     }
             });
 
             refresh.setDaemon(true);
             refresh.start();
-
-            return refresh;
         }
 
         private Connection getConnection() throws SQLException {
@@ -493,6 +538,8 @@ public class BrightspaceMigratorHandler extends BasePortalHandler {
         {
             try
             {
+                MigratorDatabase.instance.get().maybeRefreshDB();
+
                 if (!isAllowedToMigrateSitesToBrightspace()) {
                     return NEXT;
                 }

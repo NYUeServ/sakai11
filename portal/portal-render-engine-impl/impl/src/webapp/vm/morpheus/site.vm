@@ -278,12 +278,15 @@
               <div class="modal-dialog" role="document">
                 <div class="modal-content">
                   <div class="modal-header">
-                    <strong class="modal-title">Brightspace Migration Helper</strong>
+                    <strong class="modal-title">Move NYU Classes Content to NYU LMS (Brightspace)</strong>
                     <button type="button" class="close" data-dismiss="modal" aria-label="Close">
                       <span aria-hidden="true">&times;</span>
                     </button>
                   </div>
                   <div class="modal-body">
+                    <p>Use this self-service tool to copy your existing NYU Classes course content over to NYU LMS (Brightspace). Once moved, you will find corresponding "Reference Sites" in NYU LMS for each of the NYU Classes course sites you move. You will then be able to copy desired content into your current and future courses.</p>
+                    <p>Note: If a site is marked as "queued," no action is needed on your part. Additionally, student-created content (e.g., discussion board entries or messages), submissions, or grades will <strong>not</strong> be moved to NYU LMS.</p>
+                    <p>For more info, see the <a href="https://www.nyu.edu/life/information-technology/instructional-technology-support/instructional-technology-tools-and-services/nyu-lms-brightspace/reusing-course-content.html" target="_blank">Reusing NYU Classes Content in NYU LMS website</a>.</p>
                     <table class="table table-striped">
                       <thead>
                         <tr>
@@ -318,8 +321,8 @@
                   </div>
                   <div class="modal-footer">
                     <div class="pull-left text-left">
-                      <p>You will receive an email notification once your site(s) has/have been migrated to Brightspace. Note that this may take up to 48 hours.</p>
-                      <p>Migrated sites will be available within the "My Courses" widget in <a target="_blank" href="https://brightspace.nyu.edu/">NYU LMS (Brightspace)</a>.</p>
+                      <p>You will receive an email notification once your site(s) has/have been copied to NYU LMS. Note that this may take up to 48 hours.</p>
+                      <p>Once moved, your corresponding reference site(s) can be found in the "My Courses" widget in NYU LMS.</p>
                     </div>
                     <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
                   </div>
@@ -337,5 +340,11 @@
           </script>
         #end
 
+        #if ($hijackCourseSiteSetupEnabled)
+          <script src="$!{portalCDNPath}/portal/scripts/nyu-course-site-setup.js$!{portalCDNQuery}"></script>
+          <script type="text/template" id="hijackCourseSiteSetupContentTemplate">
+            ${hijackCourseSiteSetupContent}
+          </script>
+        #end
     </body>
 </html>

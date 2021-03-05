@@ -9,7 +9,7 @@ BrightspaceMigrator.prototype.init = function() {
         .attr('href', 'javascript:void(0);')
         .addClass('Mrphs-userNav__submenuitem--migrator')
         .attr('role', 'menuitem')
-        .html('Migrate to Brightspace');
+        .html('Move Content to Brightspace');
 
   $menuItem.append(this.$button);
 

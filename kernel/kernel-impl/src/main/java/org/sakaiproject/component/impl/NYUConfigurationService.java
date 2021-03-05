@@ -17,31 +17,11 @@ public class NYUConfigurationService extends BasicConfigurationService {
     private List<String> hotReloadPropertiesList = Collections.<String>emptyList();
 
     public String getString(String name, String defaultValue) {
-        if (getHotReloadProperties().indexOf(name) >= 0) {
+        if (HotReloadConfigurationService.getHotReloadOverrideProperties().indexOf(name) >= 0) {
             return HotReloadConfigurationService.getString(name, defaultValue);
         }
 
         return super.getString(name, defaultValue);
-    }
-
-    private synchronized List<String> getHotReloadProperties() {
-        String properties = HotReloadConfigurationService.getString("nyu.hot-reloadable-properties", null);
-
-        if (properties == null || "".equals(properties)) {
-            if (hotReloadProperties != null) {
-                // We got blanked!
-                hotReloadProperties = null;
-                hotReloadPropertiesList = Collections.<String>emptyList();
-            }
-        } else if (!properties.equals(hotReloadProperties)) {
-            // The property list was updated
-            hotReloadProperties = properties;
-            hotReloadPropertiesList = Arrays.asList(properties.split(" *, *"));
-        } else {
-            // No change
-        }
-
-        return hotReloadPropertiesList;
     }
 
 }
